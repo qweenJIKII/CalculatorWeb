@@ -399,8 +399,9 @@
         }
         if (e.target.matches('.bodySaveBtn')){
           const ta = item.querySelector('.bodyArea'); if (!ta) return;
-          editBody(id, ta.value);
+          // 先に開状態を閉じてから保存→renderを行うことで1回のクリックで閉じる
           openBody.delete(id);
+          editBody(id, ta.value);
           return;
         }
         if (e.target.matches('.bodyCancelBtn')){ openBody.delete(id); render(); return; }
