@@ -32,6 +32,7 @@
 
     .input-row{ display:flex; gap:8px; }
     .input-row textarea{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); resize: vertical; min-height: 92px; }
+    .input-row input[type="text"]{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
     .input-row .side{ display:flex; gap:8px; align-items:center; }
     .input-row input[type="datetime-local"]{ padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
     .input-row button{ padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:600; cursor:pointer; }
@@ -56,8 +57,20 @@
     .archived-note{ color:var(--muted); font-size:12px; margin-top:8px; }
     .lock-panel{ margin-top:12px; padding:12px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
     .lock-panel input[type="password"]{ padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    .drag-handle{ cursor:grab; user-select:none; padding:4px 6px; border:1px solid rgba(255,255,255,.12); border-radius:6px; background: rgba(255,255,255,.04); }
+    .body-preview{ color:var(--muted); font-size:12px; margin-top:6px; white-space: pre-wrap; }
+    .body-editor{ margin-top:8px; }
+    .body-editor textarea{ width:100%; min-height:120px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
 
-    @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
+    @media (max-width: 720px){
+      .app{ width:100vw; min-height:100dvh; border-radius:0; }
+      .input-row{ flex-direction: column; }
+      .input-row .side{ width:100%; justify-content: space-between; }
+      .controls{ flex-wrap: wrap; }
+      .controls button{ flex:1 1 calc(50% - 6px); }
+      .toolbar{ gap:6px; }
+      .toolbar .spacer{ display:none; }
+    }
   </style>
 </head>
 <body>
@@ -75,7 +88,7 @@
 
     <section class="content">
       <div class="input-row">
-        <textarea id="taskInput" placeholder="タスク/日記を入力（複数行可）\n#タグ を含めると分類できます\nCtrl+Enter で追加、または『追加』ボタン" aria-label="新規メモ（複数行可）"></textarea>
+        <input id="taskInput" type="text" placeholder="タイトルを入力（本文は後から各アイテムで編集）" aria-label="新規メモのタイトル" />
         <div class="side">
           <input id="dueInput" type="datetime-local" aria-label="期日" />
           <label style="display:flex;align-items:center;gap:6px;">
@@ -84,7 +97,7 @@
           <button id="addBtn">追加</button>
         </div>
       </div>
-      <div class="counter" id="charCounter">0 文字</div>
+      <div class="counter" id="charCounter">0 文字（タイトル）</div>
       <div class="toolbar" aria-label="ツールバー">
         <input id="searchInput" type="text" placeholder="検索（本文/タグ: tag:仕事）" aria-label="検索" />
         <select id="filterSel" aria-label="フィルタ">
@@ -97,6 +110,7 @@
           <option value="archived">アーカイブ</option>
         </select>
         <select id="sortSel" aria-label="並び順">
+          <option value="manual">手動</option>
           <option value="newest">新しい順</option>
           <option value="oldest">古い順</option>
           <option value="due">期日順</option>
@@ -112,7 +126,7 @@
         <button id="printBtn">印刷</button>
         <button id="lockBtn">ロック</button>
       </div>
-      <div class="hint">チェックで完了、削除で除去。改行保持。#タグで分類。期限は日付+時間に対応。</div>
+      <div class="hint">タイトルで保存、本文は各アイテムの『本文』から編集。#タグで分類（タイトル/本文対応）。期限は日付+時間に対応。</div>
       <div id="lockPanel" class="lock-panel" style="display:none;">
         <div style="margin-bottom:6px;">暗号化されたメモが見つかりました。パスワードを入力して解除します。</div>
         <input id="lockPass" type="password" placeholder="パスワード" />
@@ -129,7 +143,7 @@
       const KEY = 'calc_memo_tasks';
       const KEY_ENC = 'calc_memo_tasks_enc';
       const KEY_LOCK_META = 'calc_memo_lock';
-      /** @type {{ id:string, title:string, done:boolean, ts:number, pinned?:boolean, dueAt?:number|null, archived?:boolean, tags?:string[] }[]} */
+      /** @type {{ id:string, title:string, body?:string, done:boolean, ts:number, pinned?:boolean, dueAt?:number|null, archived?:boolean, tags?:string[] }[]} */
       const tasks = [];
       let lastSnapshot = null; // undo 1-step
 
@@ -158,6 +172,9 @@
       const archivedNote = document.getElementById('archivedNote');
 
       let locked = false;
+      /** @type {Set<string>} */
+      const openBody = new Set(); // 本文エディタ開閉状態
+      let draggingId = null;      // DnD元アイテムID
 
       // Utils
       function uid(){ return Math.random().toString(36).slice(2, 10); }
@@ -236,7 +253,7 @@
         const t = title.trim(); if (!t) return;
         const dueAt = dueEl.value ? Date.parse(dueEl.value) : null;
         takeSnapshot();
-        tasks.unshift({ id: uid(), title: t, done: false, ts: Date.now(), pinned: !!pinEl.checked, dueAt, archived:false, tags: parseTags(t) });
+        tasks.unshift({ id: uid(), title: t, body: '', done: false, ts: Date.now(), pinned: !!pinEl.checked, dueAt, archived:false, tags: parseTags(t) });
         save(); render();
         inputEl.value=''; pinEl.checked=false; dueEl.value=''; inputEl.focus(); updateCounter();
       }
@@ -245,7 +262,8 @@
       function archiveDone(){ takeSnapshot(); tasks.forEach(t=>{ if (t.done) t.archived=true; }); save(); render(); }
       function clearDone(){ if (!confirm('完了した項目を削除します。よろしいですか？')) return; takeSnapshot(); for (let i=tasks.length-1;i>=0;i--){ if (tasks[i].done) tasks.splice(i,1); } save(); render(); }
       function delTask(id){ if (!confirm('削除しますか？')) return; const i = tasks.findIndex(x=>x.id===id); if (i>=0){ takeSnapshot(); tasks.splice(i,1); save(); render(); } }
-      function editTask(id, newText){ const t = tasks.find(x=>x.id===id); if (!t) return; const txt = newText.trim(); if (!txt) return; takeSnapshot(); t.title = txt; t.tags = parseTags(txt); save(); render(); }
+      function editTask(id, newText){ const t = tasks.find(x=>x.id===id); if (!t) return; const txt = newText.trim(); if (!txt) return; takeSnapshot(); t.title = txt; t.tags = parseTags((t.title||'') + '\n' + (t.body||'')); save(); render(); }
+      function editBody(id, newBody){ const t = tasks.find(x=>x.id===id); if (!t) return; const b = (newBody||''); takeSnapshot(); t.body = b; t.tags = parseTags((t.title||'') + '\n' + (t.body||'')); save(); render(); }
       function setDue(id, dueAt){ const t = tasks.find(x=>x.id===id); if (!t) return; takeSnapshot(); t.dueAt = dueAt; save(); render(); }
 
       // Search/Filter/Sort
@@ -265,8 +283,14 @@
           if (filter!=='archived' && t.archived) return false;
           if (!q) return true;
           if (tagQ) return (t.tags||[]).includes(tagQ);
-          return t.title.toLowerCase().includes(q);
+          const titleHit = (t.title||'').toLowerCase().includes(q);
+          const bodyHit = (t.body||'').toLowerCase().includes(q);
+          return titleHit || bodyHit;
         });
+        if (sort==='manual'){
+          // 並び替えなし（配列順）
+          return arr;
+        }
         const cmp = {
           newest:(a,b)=> (b.ts - a.ts) || ((b.pinned?1:0)-(a.pinned?1:0)),
           oldest:(a,b)=> (a.ts - b.ts) || ((b.pinned?1:0)-(a.pinned?1:0)),
@@ -289,8 +313,10 @@
           const dueStr = t.dueAt ? fmtDateTime(t.dueAt) : '';
           const overdue = t.dueAt && t.dueAt < Date.now() && !t.done;
           const tags = (t.tags||[]).map(x=>`<span class="tag">#${esc(x)}</span>`).join(' ');
+          const showEditor = openBody.has(t.id);
+          const draggable = (sortSel.value==='manual');
           html += `
-          <div class="item" data-id="${t.id}">
+          <div class="item" data-id="${t.id}" draggable="${draggable}">
             <div class="left">
               <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="完了">
               <div>
@@ -300,11 +326,22 @@
                   ${dueStr?` / 期限: <span class="${overdue?'overdue':''}">${esc(dueStr)}</span>`:''}
                 </div>
                 ${tags?`<div class="tags">${tags}</div>`:''}
+                ${(t.body&& !showEditor)?`<div class="body-preview">${esc(t.body)}</div>`:''}
+                ${showEditor?`
+                <div class="body-editor">
+                  <textarea class="bodyArea" aria-label="本文入力">${esc(t.body||'')}</textarea>
+                  <div class="controls">
+                    <button class="bodySaveBtn">保存</button>
+                    <button class="bodyCancelBtn">閉じる</button>
+                  </div>
+                </div>`:''}
               </div>
             </div>
             <div class="controls">
+              <span class="drag-handle" title="ドラッグで並び替え">≡</span>
               <button class="pinBtn" aria-label="ピン切替">${t.pinned?'★':'☆'}</button>
               <button class="editBtn" aria-label="編集">編集</button>
+              <button class="bodyBtn" aria-label="本文">本文</button>
               <button class="shareBtn" aria-label="共有">共有</button>
               <button class="dueBtn" aria-label="期日設定">期日</button>
               <button class="del" aria-label="削除">削除</button>
@@ -330,9 +367,13 @@
           titleEl.addEventListener('blur', ()=> apply(), { once:true });
           return;
         }
+        if (e.target.matches('.bodyBtn')){
+          if (openBody.has(id)) openBody.delete(id); else openBody.add(id); render();
+          return;
+        }
         if (e.target.matches('.shareBtn')){
           const t = tasks.find(x=>x.id===id); if (!t) return;
-          const text = t.title + (t.dueAt?`\n期限: ${fmtDateTime(t.dueAt)}`:'');
+          const text = t.title + (t.body?`\n\n${t.body}`:'') + (t.dueAt?`\n期限: ${fmtDateTime(t.dueAt)}`:'');
           if (navigator.share){ navigator.share({ title:'メモ', text }).catch(()=>{}); }
           else { navigator.clipboard?.writeText(text).then(()=>alert('クリップボードにコピーしました')).catch(()=>{}); }
           return;
@@ -347,12 +388,42 @@
           setDue(id, ms);
           return;
         }
+        if (e.target.matches('.bodySaveBtn')){
+          const ta = item.querySelector('.bodyArea'); if (!ta) return;
+          editBody(id, ta.value);
+          openBody.delete(id);
+          return;
+        }
+        if (e.target.matches('.bodyCancelBtn')){ openBody.delete(id); render(); return; }
       });
 
       // Swipe to delete
       let startX=null; let startT=0;
       listEl.addEventListener('pointerdown', e=>{ const it = e.target.closest('.item'); if (!it) return; startX = e.clientX; startT = Date.now(); });
       listEl.addEventListener('pointerup', e=>{ const it = e.target.closest('.item'); if (!it||startX===null) return; const dx = e.clientX - startX; const dt= Date.now()-startT; startX=null; if (Math.abs(dx)>80 && dt<800){ const id = it.getAttribute('data-id'); delTask(id); } });
+
+      // Drag & Drop manual reorder (only when sort = manual)
+      listEl.addEventListener('dragstart', e=>{
+        const it = e.target.closest('.item'); if (!it) return; if (sortSel.value!=='manual') return;
+        draggingId = it.getAttribute('data-id');
+        e.dataTransfer?.setData('text/plain', draggingId);
+        e.dataTransfer?.setDragImage(it, 10, 10);
+      });
+      listEl.addEventListener('dragover', e=>{ if (sortSel.value!=='manual') return; if (draggingId) e.preventDefault(); });
+      listEl.addEventListener('drop', e=>{
+        if (sortSel.value!=='manual') return; e.preventDefault();
+        const over = e.target.closest('.item'); if (!over||!draggingId) return;
+        const targetId = over.getAttribute('data-id'); if (!targetId || targetId===draggingId) return;
+        const fromIdx = tasks.findIndex(x=>x.id===draggingId);
+        const toIdx = tasks.findIndex(x=>x.id===targetId);
+        if (fromIdx<0 || toIdx<0) return;
+        takeSnapshot();
+        const [mv] = tasks.splice(fromIdx,1);
+        tasks.splice(toIdx,0,mv);
+        save(); render();
+        draggingId = null;
+      });
+      listEl.addEventListener('dragend', ()=>{ draggingId=null; });
 
       inputEl.addEventListener('input', updateCounter);
       function updateCounter(){ const len = (inputEl.value||'').length; counterEl.textContent = `${len} 文字`; }
