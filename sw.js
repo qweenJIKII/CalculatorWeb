@@ -4,7 +4,7 @@
   - Network-first for navigation, fallback to cache, then offline page
   - Stale-while-revalidate for static assets
 */
-const VERSION = 'v1.1.0';
+const VERSION = 'v1.1.2';
 const CACHE_NAME = `calc-cache-${VERSION}`;
 const CORE_ASSETS = [
   './',

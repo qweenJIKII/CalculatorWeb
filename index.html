@@ -230,6 +230,7 @@
       const history = [];
       let degMode = true; // true: DEG, false: RAD
       let sciExpanded = false;
+      let lastWasEquals = false; // 次入力の扱いを制御
 
       function update() {
         exprEl.textContent = expr || '';
@@ -274,7 +275,13 @@
 
       function setResultText(text){ resultEl.textContent = text; }
 
-      function insert(val) { expr += val; update(); }
+      function insert(val) {
+        if (lastWasEquals) { // 数字/記号系は新規入力として開始
+          expr = '';
+          lastWasEquals = false;
+        }
+        expr += val; update();
+      }
       const OPS = new Set(['+','-','*','/','^']);
       function isOp(c){ return OPS.has(c); }
       function addOperator(op){
@@ -283,6 +290,13 @@
           // 先頭のマイナスは許容（負数）
           if (op === '-') { insert('-'); }
           return;
+        }
+        if (lastWasEquals) {
+          // 直前結果を左オペランドとして継続計算
+          const resText = resultEl.textContent;
+          const num = Number(resText);
+          if (Number.isFinite(num)) { expr = String(num); }
+          lastWasEquals = false;
         }
         // 末尾の演算子の連続を1つに畳み込む
         // ただし、"(" の直後のマイナスは負符号として許可
@@ -335,6 +349,7 @@
           if (history.length > 10) history.pop();
           renderHistory();
           saveState();
+          lastWasEquals = true;
         }
       }
 
