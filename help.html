@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171a2b" />
+  <title>説明 | 簡易電卓</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; }
+    html,body{height:100%}
+    body{margin:0; background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%); color:var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif; display:grid; place-items:center; padding:24px;}
+    .app{ width:min(820px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; }
+    .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .content{ padding:18px 16px 22px; line-height:1.75; }
+    h1{ margin:0 0 8px; font-size:20px; }
+    h2{ margin:18px 0 8px; font-size:16px; }
+    p,li{ color:var(--muted); }
+    .back{ display:inline-block; margin-top:18px; color:#b7c7ff; text-decoration:none; border:1px solid rgba(255,255,255,.1); padding:6px 10px; border-radius:8px; }
+    @media (max-width: 720px){ body{ padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);} .app{ width:100vw; border-radius:0; } }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="機能説明">
+    <div class="header">
+      <div class="title">簡易電卓 - 説明</div>
+      <div style="color:var(--muted); font-size:12px;">バージョン: 1.1</div>
+    </div>
+    <nav class="tabs" aria-label="ナビゲーション">
+      <a class="tab" href="./">電卓</a>
+      <a class="tab active" href="./help.html">説明</a>
+    </nav>
+    <section class="content">
+      <h1>使い方</h1>
+      <h2>基本</h2>
+      <ul>
+        <li>数字/演算子をタップして式を作成し、最後に「＝」で計算します。</li>
+        <li>キーボードでも操作可（0-9, + - * / ( ) . ^, Enter, Backspace, Esc）。</li>
+      </ul>
+      <h2>関数の表示/非表示</h2>
+      <ul>
+        <li>ツールバーの「関数」ボタンで、科学関数を折りたたみ/展開できます。</li>
+        <li>折りたたみ時はボタンが自動で再配置・縮小され、スマホでも「＝」が見切れにくくなります。</li>
+      </ul>
+      <h2>角度単位（度/ラジアン）</h2>
+      <ul>
+        <li>「度」ボタンで切替（度 ↔ ラジアン）。三角関数 sin, cos, tan に適用されます。</li>
+      </ul>
+      <h2>メモリ</h2>
+      <ul>
+        <li>MC: メモリクリア / MR: 読み出し / M+: 加算 / M-: 減算</li>
+      </ul>
+      <h2>編集/関数</h2>
+      <ul>
+        <li>AC: 全クリア / CE: エントリクリア / ⌫: 1文字削除 / ±: 符号反転 / %: パーセント</li>
+        <li>√, x², 1/x, ^, sin, cos, tan, log, ln, π, e をサポート（関数は折りたたみ対象です）。</li>
+      </ul>
+      <h2>共有・コピー</h2>
+      <ul>
+        <li>「コピー」で結果をクリップボードへ。「共有」は端末の共有シートを開きます（対応端末のみ）。</li>
+      </ul>
+      <h2>履歴と永続化</h2>
+      <ul>
+        <li>直近10件の履歴を保持。DEG/RAD、メモリ、関数表示状態は自動保存されます。</li>
+      </ul>
+      <h2>PWA（ホーム画面に追加・オフライン）</h2>
+      <ul>
+        <li>HTTPS配信（Netlify）でPWA対応。ホーム画面に追加してオフラインでも利用可能。</li>
+        <li>オフライン時は自動で <code>offline.html</code> にフォールバック。オンライン復帰で自動再読込します。</li>
+      </ul>
+      <a class="back" href="./">← 電卓に戻る</a>
+    </section>
+  </main>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

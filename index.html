@@ -84,7 +84,7 @@
     .equals { background: linear-gradient(180deg, rgba(110,168,255,0.25), rgba(110,168,255,0.08)); border-color: rgba(110,168,255,0.45); }
     .ok { background: linear-gradient(180deg, rgba(74,222,128,0.25), rgba(74,222,128,0.08)); border-color: rgba(74,222,128,0.45); }
 
-    .toolbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 12px 14px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 12px 14px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.06); }
     .footer { padding: 10px 14px 16px; text-align: center; color: var(--muted); font-size: 12px; }
     .footer kbd { padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.03); }
 
@@ -92,24 +92,39 @@
     .keys .wide-2 { grid-column: span 2; }
     .keys .wide-3 { grid-column: span 3; }
 
+    /* Tabs (ヘッダー下の簡易ナビ) */
+    .tabs { display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
+    .tabs .tab { color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.02); font-size: 13px; }
+    .tabs .tab.active { color: var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+
+    /* 科学関数の折りたたみ: app[data-sci="off"] の間は非表示 */
+    .app[data-sci="off"] .key[data-group="sci"] { display: none; }
+
+    /* ボタンの動的サイズ（小画面で自動縮小） */
+    button.key { padding: clamp(10px, 2vh, 14px) 0; font-size: clamp(16px, 2.4vh, 18px); }
+
     /* Mobile full-screen adjustments */
     @media (max-width: 720px) {
       body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
       .app { width: 100vw; height: 100dvh; border-radius: 0; }
       .header { padding: 12px 14px; }
       .display { padding: 16px 14px 8px 14px; }
-      .result { font-size: clamp(28px, 6.5vh, 56px); }
+      .result { font-size: clamp(24px, 6.0vh, 54px); }
       .keys { gap: 8px; padding: 12px; }
-      button.key { padding: 14px 0; font-size: 18px; }
+      button.key { padding: clamp(8px, 2.2vh, 12px) 0; font-size: clamp(15px, 2.2vh, 18px); }
     }
   </style>
 </head>
 <body>
-  <main class="app" role="application" aria-label="電卓">
+  <main class="app" role="application" aria-label="電卓" data-sci="off">
     <div class="header">
       <div class="title">簡易電卓</div>
       <div class="hint">クリック / キーボード対応</div>
     </div>
+    <nav class="tabs" aria-label="ナビゲーション">
+      <a class="tab active" href="./">電卓</a>
+      <a class="tab" href="./help.html">説明</a>
+    </nav>
 
     <section class="display" aria-live="polite">
       <div id="expr" class="expr" title="式"></div>
@@ -117,9 +132,10 @@
     </section>
 
     <section class="toolbar">
-      <button class="key util" data-act="toggle-deg" aria-label="角度単位切替">DEG</button>
-      <button class="key util" data-act="copy-res" aria-label="結果をコピー">Copy</button>
-      <button class="key util" data-act="share" aria-label="共有">Share</button>
+      <button class="key util" data-act="toggle-deg" aria-label="角度単位切替">度</button>
+      <button class="key util" data-act="copy-res" aria-label="結果をコピー">コピー</button>
+      <button class="key util" data-act="share" aria-label="共有">共有</button>
+      <button class="key util" data-act="toggle-sci" aria-label="関数の表示切替">関数</button>
     </section>
 
     <section class="keys">
@@ -138,20 +154,20 @@
       <!-- scientific / parens -->
       <button class="key op" data-val="(" aria-label="左括弧">(</button>
       <button class="key op" data-val=")" aria-label="右括弧">)</button>
-      <button class="key util" data-act="sqrt" aria-label="平方根">√</button>
-      <button class="key util" data-act="square" aria-label="2乗">x²</button>
+      <button class="key util" data-act="sqrt" data-group="sci" aria-label="平方根">√</button>
+      <button class="key util" data-act="square" data-group="sci" aria-label="2乗">x²</button>
 
       <!-- scientific row 2 -->
-      <button class="key" data-val="sin(">sin</button>
-      <button class="key" data-val="cos(">cos</button>
-      <button class="key" data-val="tan(">tan</button>
-      <button class="key" data-val="^">^</button>
+      <button class="key" data-val="sin(" data-group="sci">sin</button>
+      <button class="key" data-val="cos(" data-group="sci">cos</button>
+      <button class="key" data-val="tan(" data-group="sci">tan</button>
+      <button class="key" data-val="^" data-group="sci">^</button>
 
       <!-- scientific row 3 -->
-      <button class="key" data-val="log(">log</button>
-      <button class="key" data-val="ln(">ln</button>
-      <button class="key" data-act="const-pi">π</button>
-      <button class="key" data-act="const-e">e</button>
+      <button class="key" data-val="log(" data-group="sci">log</button>
+      <button class="key" data-val="ln(" data-group="sci">ln</button>
+      <button class="key" data-act="const-pi" data-group="sci">π</button>
+      <button class="key" data-act="const-e" data-group="sci">e</button>
 
       <!-- numbers -->
       <button class="key" data-val="7">7</button>
@@ -175,7 +191,7 @@
       <button class="key op" data-val="+">＋</button>
 
       <!-- bottom row -->
-      <button class="key util" data-act="recip" aria-label="逆数">1/x</button>
+      <button class="key util" data-act="recip" data-group="sci" aria-label="逆数">1/x</button>
       <button class="key key-enter equals wide-3" data-act="equals" aria-label="計算">＝</button>
     </section>
 
@@ -199,6 +215,7 @@
       let memory = 0;
       const history = [];
       let degMode = true; // true: DEG, false: RAD
+      let sciExpanded = false;
 
       function update() {
         exprEl.textContent = expr || '';
@@ -315,7 +332,22 @@
       }
 
       // DEG/RAD toggle
-      function toggleDeg(){ degMode = !degMode; document.querySelector('[data-act="toggle-deg"]').textContent = degMode ? 'DEG' : 'RAD'; saveState(); }
+      function toggleDeg(){
+        degMode = !degMode;
+        document.querySelector('[data-act="toggle-deg"]').textContent = degMode ? '度' : 'ラジアン';
+        saveState();
+      }
+
+      // Sci toggle
+      function applySciState(){
+        const app = document.querySelector('.app');
+        app?.setAttribute('data-sci', sciExpanded ? 'on' : 'off');
+      }
+      function toggleSci(){
+        sciExpanded = !sciExpanded;
+        applySciState();
+        saveState();
+      }
 
       // Constants
       function insertPI(){ insert('PI'); }
@@ -330,15 +362,18 @@
           localStorage.setItem('calc_history', JSON.stringify(history));
           localStorage.setItem('calc_memory', JSON.stringify(memory));
           localStorage.setItem('calc_deg', JSON.stringify(degMode));
+          localStorage.setItem('calc_sci', JSON.stringify(sciExpanded));
         } catch(_){}}
       function loadState(){
         try {
           const h = JSON.parse(localStorage.getItem('calc_history')||'[]');
           const m = JSON.parse(localStorage.getItem('calc_memory')||'0');
           const d = JSON.parse(localStorage.getItem('calc_deg')||'true');
+          const s = JSON.parse(localStorage.getItem('calc_sci')||'false');
           if (Array.isArray(h)) { history.splice(0, history.length, ...h.slice(0,10)); renderHistory(); }
           if (typeof m === 'number') memory = m;
-          degMode = !!d; document.querySelector('[data-act="toggle-deg"]').textContent = degMode ? 'DEG' : 'RAD';
+          degMode = !!d; document.querySelector('[data-act="toggle-deg"]').textContent = degMode ? '度' : 'ラジアン';
+          sciExpanded = !!s; applySciState();
         } catch(_){}
       }
 
@@ -365,6 +400,7 @@
           if (act === 'copy-res') return copyResult();
           if (act === 'share') return share();
           if (act === 'toggle-deg') return toggleDeg();
+          if (act === 'toggle-sci') return toggleSci();
           if (act === 'const-pi') return insertPI();
           if (act === 'const-e') return insertE();
           if (act === 'use-history') {
