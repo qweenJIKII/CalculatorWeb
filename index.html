@@ -34,7 +34,7 @@
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 16px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
-      overflow: hidden;
+      overflow: auto;
     }
     .header {
       display: flex; align-items: center; justify-content: space-between;
@@ -65,6 +65,8 @@
       gap: 10px;
       padding: 14px;
       background: rgba(255,255,255,0.01);
+      grid-auto-rows: minmax(44px, auto);
+      padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
     }
     button.key {
       appearance: none; border: 0; cursor: pointer;
@@ -106,12 +108,20 @@
     /* Mobile full-screen adjustments */
     @media (max-width: 720px) {
       body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-      .app { width: 100vw; height: 100dvh; border-radius: 0; }
+      .app { width: 100vw; min-height: 100dvh; border-radius: 0; overflow-y: auto; }
       .header { padding: 12px 14px; }
       .display { padding: 16px 14px 8px 14px; }
       .result { font-size: clamp(24px, 6.0vh, 54px); }
       .keys { gap: 8px; padding: 12px; }
       button.key { padding: clamp(8px, 2.2vh, 12px) 0; font-size: clamp(15px, 2.2vh, 18px); }
+    }
+
+    /* Very short viewport height adjustments */
+    @media (max-height: 720px) {
+      .result { font-size: clamp(22px, 5.5vh, 48px); }
+      .keys { gap: 6px; }
+      .toolbar { gap: 8px; }
+      button.key { padding: clamp(6px, 1.8vh, 10px) 0; font-size: clamp(14px, 2vh, 17px); }
     }
   </style>
 </head>
@@ -230,9 +240,7 @@
       function compute(expression) {
         if (!expression) return '0';
         if (!sanitize(expression)) return 'Error';
-        const badOps = /[+\-*/]{2,}/;
         const cleaned = expression.replace(/\s+/g, '');
-        if (badOps.test(cleaned.replace(/\^/g, '*'))) return 'Error';
         // ^ を ** に変換
         const exprJS = expression.replace(/\^/g, '**');
         // 識別子のホワイトリスト検証
@@ -263,6 +271,24 @@
       function setResultText(text){ resultEl.textContent = text; }
 
       function insert(val) { expr += val; update(); }
+      const OPS = new Set(['+','-','*','/','^']);
+      function isOp(c){ return OPS.has(c); }
+      function addOperator(op){
+        if (!isOp(op)) { insert(op); return; }
+        if (expr.length === 0) {
+          // 先頭のマイナスは許容（負数）
+          if (op === '-') { insert('-'); }
+          return;
+        }
+        // 末尾の演算子の連続を1つに畳み込む
+        // ただし、"(" の直後のマイナスは負符号として許可
+        const last = expr.slice(-1);
+        if (last === '(' && op === '-') { insert('-'); return; }
+        // 末尾の連続演算子を除去
+        expr = expr.replace(/[+\-*/^]+$/, '');
+        // 置換として現在の演算子を付与
+        insert(op);
+      }
       function back() { expr = expr.slice(0, -1); update(); }
       function clearAll() { expr = ''; update(); setResultText('0'); }
       function clearEntry() {
@@ -410,7 +436,10 @@
             return;
           }
         }
-        if (val) { insert(val); }
+        if (val) {
+          if (isOp(val)) { addOperator(val); }
+          else { insert(val); }
+        }
         haptic();
       });
 
@@ -423,7 +452,10 @@
         if (map[e.key]) { map[e.key](); return; }
         const k = e.key;
         const allowed = '0123456789+-*/().,^';
-        if (allowed.includes(k)) { insert(k); return; }
+        if (allowed.includes(k)) {
+          if (isOp(k)) { addOperator(k); return; }
+          insert(k); return;
+        }
         // quick functions typing
         if (/^[a-z]$/i.test(k)) { insert(k); }
       });
