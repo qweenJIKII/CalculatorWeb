@@ -27,13 +27,13 @@
     .content{ padding:16px 14px 20px; }
 
     .input-row{ display:flex; gap:8px; }
-    .input-row input[type="text"]{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    .input-row textarea{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); resize: vertical; min-height: 92px; }
     .input-row button{ padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:600; cursor:pointer; }
 
     .list{ margin-top:14px; display:grid; gap:8px; }
     .item{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px 12px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
     .left{ display:flex; gap:10px; align-items:center; }
-    .title{ color:var(--text); }
+    .title{ color:var(--text); white-space: pre-wrap; }
     .title.done{ color:var(--muted); text-decoration: line-through; opacity:.8; }
     .controls{ display:flex; gap:8px; align-items:center; }
     .controls button{ padding:6px 10px; font-size:12px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color:var(--text); cursor:pointer; }
@@ -47,7 +47,7 @@
   <main class="app" aria-label="メモ">
     <div class="header">
       <div class="title">簡易電卓 - メモ</div>
-      <div style="color:var(--muted); font-size:12px;">日常タスクの簡易メモ</div>
+      <div style="color:var(--muted); font-size:12px;">タスクや日記を手早くメモ</div>
     </div>
     <nav class="tabs" aria-label="ナビゲーション">
       <a class="tab" href="./">電卓</a>
@@ -58,10 +58,10 @@
 
     <section class="content">
       <div class="input-row">
-        <input id="taskInput" type="text" placeholder="タスクを入力して Enter または『追加』" aria-label="新規タスク" />
+        <textarea id="taskInput" placeholder="タスク/日記を入力（複数行可）\nCtrl+Enter で追加、または『追加』ボタン" aria-label="新規メモ（複数行可）"></textarea>
         <button id="addBtn">追加</button>
       </div>
-      <div class="hint">チェックで完了、ゴミ箱で削除。自動的に保存されます。</div>
+      <div class="hint">チェックで完了、削除で除去。入力は自動保存（ローカル）され、改行も保持されます。</div>
       <div id="list" class="list" aria-live="polite"></div>
     </section>
   </main>
@@ -114,7 +114,7 @@
         }
       });
 
-      inputEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') addTask(inputEl.value); });
+      inputEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addTask(inputEl.value); } });
       addBtn.addEventListener('click', ()=> addTask(inputEl.value));
 
       // SW registration

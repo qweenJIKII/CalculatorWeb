@@ -87,7 +87,9 @@
         dlBtn.href = src;
       }
 
-      input.value = location.href;
+      // 既定は電卓トップ（同ディレクトリの index）を指す
+      const defaultUrl = new URL('./', location.href).href;
+      input.value = defaultUrl;
       update();
 
       setBtn.addEventListener('click', update);
