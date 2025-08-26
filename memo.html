@@ -26,19 +26,36 @@
     .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
     .content{ padding:16px 14px 20px; }
 
+    .toolbar{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+    .toolbar input[type="text"], .toolbar select { padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    .toolbar .spacer{ flex:1; }
+
     .input-row{ display:flex; gap:8px; }
     .input-row textarea{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); resize: vertical; min-height: 92px; }
+    .input-row .side{ display:flex; gap:8px; align-items:center; }
+    .input-row input[type="datetime-local"]{ padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
     .input-row button{ padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:600; cursor:pointer; }
+    .counter{ color:var(--muted); font-size:12px; margin-top:6px; }
 
     .list{ margin-top:14px; display:grid; gap:8px; }
-    .item{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px 12px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
-    .left{ display:flex; gap:10px; align-items:center; }
+    .group-title{ margin-top:16px; color:var(--muted); font-size:12px; border-left:3px solid rgba(255,255,255,.2); padding-left:8px; }
+    .item{ display:flex; gap:10px; align-items:flex-start; justify-content:space-between; padding:10px 12px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+    .left{ display:flex; gap:10px; align-items:flex-start; }
     .title{ color:var(--text); white-space: pre-wrap; }
     .title.done{ color:var(--muted); text-decoration: line-through; opacity:.8; }
-    .controls{ display:flex; gap:8px; align-items:center; }
+    .meta{ color:var(--muted); font-size:11px; }
+    .tags{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .tag{ font-size:11px; padding:2px 6px; border-radius:999px; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); color:var(--muted); }
+    .controls{ display:flex; gap:6px; align-items:center; }
     .controls button{ padding:6px 10px; font-size:12px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color:var(--text); cursor:pointer; }
     .controls .del{ border-color: rgba(255,255,255,.18); color:#ffd2d2; }
+    .pin{ color:#ffd479; }
+    .overdue{ color:#ffb4b4; }
     .hint{ color:var(--muted); font-size:12px; margin-top:10px; }
+
+    .archived-note{ color:var(--muted); font-size:12px; margin-top:8px; }
+    .lock-panel{ margin-top:12px; padding:12px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+    .lock-panel input[type="password"]{ padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
 
     @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
   </style>
@@ -58,64 +75,316 @@
 
     <section class="content">
       <div class="input-row">
-        <textarea id="taskInput" placeholder="タスク/日記を入力（複数行可）\nCtrl+Enter で追加、または『追加』ボタン" aria-label="新規メモ（複数行可）"></textarea>
-        <button id="addBtn">追加</button>
+        <textarea id="taskInput" placeholder="タスク/日記を入力（複数行可）\n#タグ を含めると分類できます\nCtrl+Enter で追加、または『追加』ボタン" aria-label="新規メモ（複数行可）"></textarea>
+        <div class="side">
+          <input id="dueInput" type="datetime-local" aria-label="期日" />
+          <label style="display:flex;align-items:center;gap:6px;">
+            <input id="pinInput" type="checkbox" />★
+          </label>
+          <button id="addBtn">追加</button>
+        </div>
       </div>
-      <div class="hint">チェックで完了、削除で除去。入力は自動保存（ローカル）され、改行も保持されます。</div>
+      <div class="counter" id="charCounter">0 文字</div>
+      <div class="toolbar" aria-label="ツールバー">
+        <input id="searchInput" type="text" placeholder="検索（本文/タグ: tag:仕事）" aria-label="検索" />
+        <select id="filterSel" aria-label="フィルタ">
+          <option value="all">すべて</option>
+          <option value="active">未完</option>
+          <option value="done">完了</option>
+          <option value="pinned">ピン留め</option>
+          <option value="due">期限あり</option>
+          <option value="overdue">期限超過</option>
+          <option value="archived">アーカイブ</option>
+        </select>
+        <select id="sortSel" aria-label="並び順">
+          <option value="newest">新しい順</option>
+          <option value="oldest">古い順</option>
+          <option value="due">期日順</option>
+          <option value="pinned_new">ピン→新しい順</option>
+        </select>
+        <span class="spacer"></span>
+        <button id="bulkArchiveBtn">完了→アーカイブ</button>
+        <button id="bulkClearDoneBtn">完了を削除</button>
+        <button id="undoBtn">元に戻す</button>
+        <button id="exportBtn">エクスポート</button>
+        <button id="importBtn">インポート</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none;" />
+        <button id="printBtn">印刷</button>
+        <button id="lockBtn">ロック</button>
+      </div>
+      <div class="hint">チェックで完了、削除で除去。改行保持。#タグで分類。期限は日付+時間に対応。</div>
+      <div id="lockPanel" class="lock-panel" style="display:none;">
+        <div style="margin-bottom:6px;">暗号化されたメモが見つかりました。パスワードを入力して解除します。</div>
+        <input id="lockPass" type="password" placeholder="パスワード" />
+        <button id="unlockBtn">解除</button>
+        <button id="wipeEncBtn">暗号データ削除</button>
+      </div>
       <div id="list" class="list" aria-live="polite"></div>
+      <div id="archivedNote" class="archived-note"></div>
     </section>
   </main>
 
   <script>
     (function(){
       const KEY = 'calc_memo_tasks';
-      /** @type {{ id:string, title:string, done:boolean, ts:number }[]} */
+      const KEY_ENC = 'calc_memo_tasks_enc';
+      const KEY_LOCK_META = 'calc_memo_lock';
+      /** @type {{ id:string, title:string, done:boolean, ts:number, pinned?:boolean, dueAt?:number|null, archived?:boolean, tags?:string[] }[]} */
       const tasks = [];
+      let lastSnapshot = null; // undo 1-step
+
+      // Elements
       const listEl = document.getElementById('list');
       const inputEl = document.getElementById('taskInput');
+      const dueEl = document.getElementById('dueInput');
+      const pinEl = document.getElementById('pinInput');
       const addBtn = document.getElementById('addBtn');
+      const counterEl = document.getElementById('charCounter');
+      const filterSel = document.getElementById('filterSel');
+      const sortSel = document.getElementById('sortSel');
+      const searchInput = document.getElementById('searchInput');
+      const bulkArchiveBtn = document.getElementById('bulkArchiveBtn');
+      const bulkClearDoneBtn = document.getElementById('bulkClearDoneBtn');
+      const undoBtn = document.getElementById('undoBtn');
+      const exportBtn = document.getElementById('exportBtn');
+      const importBtn = document.getElementById('importBtn');
+      const importFile = document.getElementById('importFile');
+      const printBtn = document.getElementById('printBtn');
+      const lockBtn = document.getElementById('lockBtn');
+      const lockPanel = document.getElementById('lockPanel');
+      const lockPass = document.getElementById('lockPass');
+      const unlockBtn = document.getElementById('unlockBtn');
+      const wipeEncBtn = document.getElementById('wipeEncBtn');
+      const archivedNote = document.getElementById('archivedNote');
 
+      let locked = false;
+
+      // Utils
       function uid(){ return Math.random().toString(36).slice(2, 10); }
-      function save(){ try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch(_){} }
-      function load(){
-        try {
-          const raw = JSON.parse(localStorage.getItem(KEY)||'[]');
-          if (Array.isArray(raw)) { tasks.splice(0, tasks.length, ...raw); }
-        } catch(_){}
+      function esc(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+      function parseTags(text){
+        const set = new Set();
+        const re = /#([^\s#]+)/g; let m;
+        while ((m = re.exec(text))){ set.add(m[1].toLowerCase()); }
+        return Array.from(set);
       }
+      function fmtDateTime(ms){
+        const d = new Date(ms);
+        const y = d.getFullYear();
+        const m = ('0'+(d.getMonth()+1)).slice( -2 );
+        const da = ('0'+d.getDate()).slice( -2 );
+        const hh = ('0'+d.getHours()).slice( -2 );
+        const mm = ('0'+d.getMinutes()).slice( -2 );
+        return `${y}-${m}-${da} ${hh}:${mm}`;
+      }
+      function groupLabel(ms){
+        const d = new Date(ms); const now = new Date();
+        const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const diff = Math.round((today - day)/86400000);
+        if (diff===0) return '今日';
+        if (diff===1) return '昨日';
+        return `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}-${('0'+d.getDate()).slice(-2)}`;
+      }
+      function takeSnapshot(){ lastSnapshot = JSON.stringify(tasks); }
+      function undo(){ if (lastSnapshot){ tasks.splice(0,tasks.length,...JSON.parse(lastSnapshot)); save(); render(); lastSnapshot=null; } }
+
+      function save(){ try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch(_){} }
+      function loadPlain(){
+        try { const raw = JSON.parse(localStorage.getItem(KEY)||'[]'); if (Array.isArray(raw)) tasks.splice(0, tasks.length, ...raw); } catch(_){ }
+      }
+      function hasEncrypted(){ return !!localStorage.getItem(KEY_ENC); }
+
+      // Crypto helpers
+      function strToBuf(str){ return new TextEncoder().encode(str); }
+      function bufToB64(buf){ return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+      function b64ToBuf(b64){ const bin = atob(b64); const arr = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return arr.buffer; }
+      async function deriveKey(pw, salt){
+        const keyMat = await crypto.subtle.importKey('raw', strToBuf(pw), 'PBKDF2', false, ['deriveKey']);
+        return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations: 100000, hash: 'SHA-256'}, keyMat, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+      }
+      async function lockWithPassword(pw){
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const key = await deriveKey(pw, salt);
+        const data = strToBuf(JSON.stringify(tasks));
+        const cipher = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, data);
+        localStorage.removeItem(KEY);
+        localStorage.setItem(KEY_ENC, JSON.stringify({ cipher: bufToB64(cipher), salt: bufToB64(salt), iv: bufToB64(iv) }));
+        localStorage.setItem(KEY_LOCK_META, JSON.stringify({ locked:true }));
+        locked = true; updateLockUI();
+      }
+      async function unlockWithPassword(pw){
+        const enc = JSON.parse(localStorage.getItem(KEY_ENC)||'null'); if (!enc) return false;
+        try {
+          const salt = b64ToBuf(enc.salt); const iv = b64ToBuf(enc.iv); const cipher = b64ToBuf(enc.cipher);
+          const key = await deriveKey(pw, new Uint8Array(salt));
+          const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv: new Uint8Array(iv)}, key, cipher);
+          const json = new TextDecoder().decode(plain);
+          const arr = JSON.parse(json);
+          tasks.splice(0, tasks.length, ...arr);
+          save();
+          localStorage.removeItem(KEY_ENC); localStorage.removeItem(KEY_LOCK_META);
+          locked = false; updateLockUI(); render();
+          return true;
+        } catch(e){ alert('復号に失敗しました。パスワードを確認してください。'); return false; }
+      }
+      function updateLockUI(){ lockPanel.style.display = locked ? '' : 'none'; }
+
+      // Add / Edit / Delete
+      function addTask(title){
+        const t = title.trim(); if (!t) return;
+        const dueAt = dueEl.value ? Date.parse(dueEl.value) : null;
+        takeSnapshot();
+        tasks.unshift({ id: uid(), title: t, done: false, ts: Date.now(), pinned: !!pinEl.checked, dueAt, archived:false, tags: parseTags(t) });
+        save(); render();
+        inputEl.value=''; pinEl.checked=false; dueEl.value=''; inputEl.focus(); updateCounter();
+      }
+      function toggleDone(id, v){ const t = tasks.find(x=>x.id===id); if (!t) return; takeSnapshot(); t.done=!!v; save(); render(); }
+      function togglePin(id){ const t = tasks.find(x=>x.id===id); if (!t) return; takeSnapshot(); t.pinned = !t.pinned; save(); render(); }
+      function archiveDone(){ takeSnapshot(); tasks.forEach(t=>{ if (t.done) t.archived=true; }); save(); render(); }
+      function clearDone(){ if (!confirm('完了した項目を削除します。よろしいですか？')) return; takeSnapshot(); for (let i=tasks.length-1;i>=0;i--){ if (tasks[i].done) tasks.splice(i,1); } save(); render(); }
+      function delTask(id){ if (!confirm('削除しますか？')) return; const i = tasks.findIndex(x=>x.id===id); if (i>=0){ takeSnapshot(); tasks.splice(i,1); save(); render(); } }
+      function editTask(id, newText){ const t = tasks.find(x=>x.id===id); if (!t) return; const txt = newText.trim(); if (!txt) return; takeSnapshot(); t.title = txt; t.tags = parseTags(txt); save(); render(); }
+      function setDue(id, dueAt){ const t = tasks.find(x=>x.id===id); if (!t) return; takeSnapshot(); t.dueAt = dueAt; save(); render(); }
+
+      // Search/Filter/Sort
+      function applyFilterSort(){
+        const q = (searchInput.value||'').trim().toLowerCase();
+        const filter = filterSel.value;
+        const sort = sortSel.value;
+        const tagQ = q.startsWith('tag:') ? q.slice(4) : null;
+        let arr = tasks.slice();
+        arr = arr.filter(t=>{
+          if (filter==='active' && (t.done || t.archived)) return false;
+          if (filter==='done' && (!t.done || t.archived)) return false;
+          if (filter==='pinned' && (!t.pinned || t.archived)) return false;
+          if (filter==='due' && (!t.dueAt || t.archived)) return false;
+          if (filter==='overdue' && (!(t.dueAt && t.dueAt < Date.now() && !t.done) || t.archived)) return false;
+          if (filter==='archived' && !t.archived) return false;
+          if (filter!=='archived' && t.archived) return false;
+          if (!q) return true;
+          if (tagQ) return (t.tags||[]).includes(tagQ);
+          return t.title.toLowerCase().includes(q);
+        });
+        const cmp = {
+          newest:(a,b)=> (b.ts - a.ts) || ((b.pinned?1:0)-(a.pinned?1:0)),
+          oldest:(a,b)=> (a.ts - b.ts) || ((b.pinned?1:0)-(a.pinned?1:0)),
+          due:(a,b)=> ((a.dueAt??Infinity)-(b.dueAt??Infinity)) || ((b.pinned?1:0)-(a.pinned?1:0)) || (b.ts-a.ts),
+          pinned_new:(a,b)=> ((b.pinned?1:0)-(a.pinned?1:0)) || (b.ts - a.ts),
+        }[sort] || ((a,b)=> b.ts-a.ts);
+        arr.sort(cmp);
+        return arr;
+      }
+
       function render(){
-        listEl.innerHTML = tasks.map(t => `
+        if (locked){ updateLockUI(); return; }
+        const arr = applyFilterSort();
+        // group by creation date
+        let html = '';
+        let lastGroup = '';
+        for (const t of arr){
+          const g = groupLabel(t.ts);
+          if (g!==lastGroup){ html += `<div class="group-title">${g}</div>`; lastGroup=g; }
+          const dueStr = t.dueAt ? fmtDateTime(t.dueAt) : '';
+          const overdue = t.dueAt && t.dueAt < Date.now() && !t.done;
+          const tags = (t.tags||[]).map(x=>`<span class="tag">#${esc(x)}</span>`).join(' ');
+          html += `
           <div class="item" data-id="${t.id}">
             <div class="left">
               <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="完了">
-              <div class="title ${t.done ? 'done' : ''}">${escapeHtml(t.title)}</div>
+              <div>
+                <div class="title ${t.done ? 'done' : ''}" data-editable>${esc(t.title)}</div>
+                <div class="meta">
+                  作成: ${fmtDateTime(t.ts)} ${t.pinned?'<span class="pin">★ピン</span>':''}
+                  ${dueStr?` / 期限: <span class="${overdue?'overdue':''}">${esc(dueStr)}</span>`:''}
+                </div>
+                ${tags?`<div class="tags">${tags}</div>`:''}
+              </div>
             </div>
             <div class="controls">
+              <button class="pinBtn" aria-label="ピン切替">${t.pinned?'★':'☆'}</button>
+              <button class="editBtn" aria-label="編集">編集</button>
+              <button class="shareBtn" aria-label="共有">共有</button>
+              <button class="dueBtn" aria-label="期日設定">期日</button>
               <button class="del" aria-label="削除">削除</button>
             </div>
-          </div>
-        `).join('');
-      }
-      function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-      function addTask(title){
-        const t = title.trim(); if (!t) return;
-        tasks.unshift({ id: uid(), title: t, done: false, ts: Date.now() });
-        save(); render(); inputEl.value=''; inputEl.focus();
+          </div>`;
+        }
+        listEl.innerHTML = html;
+        archivedNote.textContent = filterSel.value==='archived' ? 'アーカイブされた項目のみ表示中' : '';
       }
 
+      // Events
       listEl.addEventListener('click', (e) => {
         const item = e.target.closest('.item'); if (!item) return;
         const id = item.getAttribute('data-id');
-        if (e.target.matches('input[type="checkbox"]')){
-          const t = tasks.find(x=>x.id===id); if (!t) return; t.done = e.target.checked; save(); render(); return;
+        if (e.target.matches('input[type="checkbox"]')){ toggleDone(id, e.target.checked); return; }
+        if (e.target.matches('.del')){ delTask(id); return; }
+        if (e.target.matches('.pinBtn')){ togglePin(id); return; }
+        if (e.target.matches('.editBtn')){
+          const titleEl = item.querySelector('[data-editable]');
+          const old = titleEl.textContent||''; titleEl.contentEditable = 'true'; titleEl.focus();
+          const apply = ()=>{ titleEl.contentEditable='false'; const txt = titleEl.textContent||''; if (txt!==old) editTask(id, txt); else render(); };
+          titleEl.addEventListener('keydown', (ke)=>{ if ((ke.ctrlKey||ke.metaKey) && ke.key==='Enter'){ ke.preventDefault(); apply(); } }, { once:true });
+          titleEl.addEventListener('blur', ()=> apply(), { once:true });
+          return;
         }
-        if (e.target.matches('.del')){
-          const idx = tasks.findIndex(x=>x.id===id); if (idx>=0) { tasks.splice(idx,1); save(); render(); }
+        if (e.target.matches('.shareBtn')){
+          const t = tasks.find(x=>x.id===id); if (!t) return;
+          const text = t.title + (t.dueAt?`\n期限: ${fmtDateTime(t.dueAt)}`:'');
+          if (navigator.share){ navigator.share({ title:'メモ', text }).catch(()=>{}); }
+          else { navigator.clipboard?.writeText(text).then(()=>alert('クリップボードにコピーしました')).catch(()=>{}); }
+          return;
+        }
+        if (e.target.matches('.dueBtn')){
+          const t = tasks.find(x=>x.id===id); if (!t) return;
+          const input = prompt('期日 (YYYY-MM-DD HH:MM) を入力。空で解除', t.dueAt?fmtDateTime(t.dueAt):'');
+          if (input===null) return; const v = input.trim();
+          if (!v){ setDue(id, null); return; }
+          const iso = v.replace(' ', 'T'); const ms = Date.parse(iso);
+          if (isNaN(ms)){ alert('形式が正しくありません'); return; }
+          setDue(id, ms);
+          return;
         }
       });
 
+      // Swipe to delete
+      let startX=null; let startT=0;
+      listEl.addEventListener('pointerdown', e=>{ const it = e.target.closest('.item'); if (!it) return; startX = e.clientX; startT = Date.now(); });
+      listEl.addEventListener('pointerup', e=>{ const it = e.target.closest('.item'); if (!it||startX===null) return; const dx = e.clientX - startX; const dt= Date.now()-startT; startX=null; if (Math.abs(dx)>80 && dt<800){ const id = it.getAttribute('data-id'); delTask(id); } });
+
+      inputEl.addEventListener('input', updateCounter);
+      function updateCounter(){ const len = (inputEl.value||'').length; counterEl.textContent = `${len} 文字`; }
       inputEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addTask(inputEl.value); } });
       addBtn.addEventListener('click', ()=> addTask(inputEl.value));
+      filterSel.addEventListener('change', render);
+      sortSel.addEventListener('change', render);
+      searchInput.addEventListener('input', ()=> { render(); });
+      bulkArchiveBtn.addEventListener('click', archiveDone);
+      bulkClearDoneBtn.addEventListener('click', clearDone);
+      undoBtn.addEventListener('click', undo);
+      exportBtn.addEventListener('click', ()=>{
+        const blob = new Blob([JSON.stringify(tasks,null,2)], {type:'application/json'});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `memo-export-${Date.now()}.json`; a.click(); URL.revokeObjectURL(a.href);
+      });
+      importBtn.addEventListener('click', ()=> importFile.click());
+      importFile.addEventListener('change', async ()=>{
+        if (!importFile.files||importFile.files.length===0) return; const file = importFile.files[0]; const txt = await file.text();
+        try{
+          const data = JSON.parse(txt);
+          if (!Array.isArray(data)) throw 0;
+          if (!confirm('インポートすると現在のメモは置き換えられます。続行しますか？')) return;
+          takeSnapshot(); tasks.splice(0,tasks.length,...data); save(); render();
+        }catch{ alert('JSON形式が不正です'); }
+        finally{ importFile.value=''; }
+      });
+      printBtn.addEventListener('click', ()=> window.print());
+      lockBtn.addEventListener('click', async ()=>{
+        const pw = prompt('ロック用パスワードを入力'); if (!pw) return; await lockWithPassword(pw);
+      });
+      unlockBtn.addEventListener('click', async ()=>{ const pw = lockPass.value; if (!pw) return; await unlockWithPassword(pw); lockPass.value=''; });
+      wipeEncBtn.addEventListener('click', ()=>{ if (!confirm('暗号データを削除しますか？（元に戻せません）')) return; localStorage.removeItem(KEY_ENC); localStorage.removeItem(KEY_LOCK_META); locked=false; updateLockUI(); });
 
       // SW registration
       if ('serviceWorker' in navigator) {
@@ -124,7 +393,9 @@
         });
       }
 
-      load(); render();
+      // Init
+      if (hasEncrypted()){ locked = true; updateLockUI(); } else { loadPlain(); }
+      render(); updateCounter();
     })();
   </script>
 </body>
