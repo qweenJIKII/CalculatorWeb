@@ -53,6 +53,7 @@
     .pin{ color:#ffd479; }
     .overdue{ color:#ffb4b4; }
     .hint{ color:var(--muted); font-size:12px; margin-top:10px; }
+    .due-hint{ color:var(--muted); font-size:11px; }
 
     .archived-note{ color:var(--muted); font-size:12px; margin-top:8px; }
     .lock-panel{ margin-top:12px; padding:12px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
@@ -60,7 +61,7 @@
     .drag-handle{ cursor:grab; user-select:none; padding:4px 6px; border:1px solid rgba(255,255,255,.12); border-radius:6px; background: rgba(255,255,255,.04); }
     .body-preview{ color:var(--muted); font-size:12px; margin-top:6px; white-space: pre-wrap; }
     .body-editor{ margin-top:8px; }
-    .body-editor textarea{ width:100%; min-height:120px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    .body-editor textarea{ width:100%; min-height:120px; max-height:50vh; overflow:auto; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
 
     @media (max-width: 720px){
       .app{ width:100vw; min-height:100dvh; border-radius:0; }
@@ -90,7 +91,8 @@
       <div class="input-row">
         <input id="taskInput" type="text" placeholder="タイトルを入力（本文は後から各アイテムで編集）" aria-label="新規メモのタイトル" />
         <div class="side">
-          <input id="dueInput" type="datetime-local" aria-label="期日" />
+          <input id="dueInput" type="datetime-local" aria-label="期日" title="未設定でもOK" />
+          <span class="due-hint">未設定は空のままでOK</span>
           <label style="display:flex;align-items:center;gap:6px;">
             <input id="pinInput" type="checkbox" />★
           </label>
@@ -255,7 +257,7 @@
         takeSnapshot();
         tasks.unshift({ id: uid(), title: t, body: '', done: false, ts: Date.now(), pinned: !!pinEl.checked, dueAt, archived:false, tags: parseTags(t) });
         save(); render();
-        inputEl.value=''; pinEl.checked=false; dueEl.value=''; inputEl.focus(); updateCounter();
+        inputEl.value=''; pinEl.checked=false; dueEl.value=''; inputEl.blur(); updateCounter();
       }
       function toggleDone(id, v){ const t = tasks.find(x=>x.id===id); if (!t) return; takeSnapshot(); t.done=!!v; save(); render(); }
       function togglePin(id){ const t = tasks.find(x=>x.id===id); if (!t) return; takeSnapshot(); t.pinned = !t.pinned; save(); render(); }
@@ -380,7 +382,7 @@
         }
         if (e.target.matches('.dueBtn')){
           const t = tasks.find(x=>x.id===id); if (!t) return;
-          const input = prompt('期日 (YYYY-MM-DD HH:MM) を入力。空で解除', t.dueAt?fmtDateTime(t.dueAt):'');
+          const input = prompt('期日 (YYYY-MM-DD HH:MM) を入力。空で解除（未設定は空のままでOK）', t.dueAt?fmtDateTime(t.dueAt):'');
           if (input===null) return; const v = input.trim();
           if (!v){ setDue(id, null); return; }
           const iso = v.replace(' ', 'T'); const ms = Date.parse(iso);
