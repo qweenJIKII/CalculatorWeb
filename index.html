@@ -148,6 +148,7 @@
     <section class="toolbar">
       <button class="key util" data-act="toggle-deg" aria-label="角度単位切替">度</button>
       <button class="key util" data-act="copy-res" aria-label="結果をコピー">コピー</button>
+      <button class="key util" data-act="paste" aria-label="貼り付け">貼り付け</button>
       <button class="key util" data-act="share" aria-label="共有">共有</button>
       <button class="key util" data-act="toggle-sci" aria-label="関数の表示切替">関数</button>
     </section>
@@ -370,6 +371,16 @@
 
       // Clipboard / Share
       async function copyResult(){ try { await navigator.clipboard?.writeText(resultEl.textContent); } catch(_){} }
+      async function pasteExpr(){
+        try {
+          const read = await navigator.clipboard?.readText?.();
+          if (!read) return;
+          // 許可された文字のみ（数字/演算子/小数点/括弧/^/英字）
+          const cleaned = (read.match(/[0-9+\-*/().,^A-Za-z]+/g) || []).join("");
+          if (!cleaned) return;
+          insert(cleaned);
+        } catch(_){}
+      }
       async function share(){
         const data = { title: '簡易電卓', text: `${expr || ''} = ${resultEl.textContent}`, url: location.href };
         if (navigator.share) { try { await navigator.share(data); return; } catch(_){} }
@@ -443,6 +454,7 @@
           if (act === 'mplus') return memoryPlus();
           if (act === 'mminus') return memoryMinus();
           if (act === 'copy-res') return copyResult();
+          if (act === 'paste') return pasteExpr();
           if (act === 'share') return share();
           if (act === 'toggle-deg') return toggleDeg();
           if (act === 'toggle-sci') return toggleSci();
