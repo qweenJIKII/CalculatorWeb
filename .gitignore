@@ -1,0 +1,11 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+
+# Generated icons
+icons/icon-192.png
+icons/icon-512.png
+
+# Cache / misc
+**/.cache/

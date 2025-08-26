@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>オフライン | 簡易電卓</title>
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --text:#e9ecf1; --muted:#a8b0c2; }
+    html,body { height:100%; }
+    body { margin:0; background:linear-gradient(180deg, rgba(15,18,34,1), rgba(23,26,43,1)); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, sans-serif; display:grid; place-items:center; }
+    .card { width:min(520px, 92vw); background:var(--panel); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:24px; box-shadow: 0 6px 30px rgba(0,0,0,.35); }
+    h1 { margin:0 0 12px; font-size:20px; }
+    p { margin:0 0 10px; color:var(--muted); }
+    ul { margin:10px 0 0 22px; color:var(--muted); }
+    a { color:#6ea8ff; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>オフラインです</h1>
+    <p>ネットワークに接続できません。接続が回復すると自動で再読み込みされます。</p>
+    <ul>
+      <li>Wi‑Fi / モバイルデータの状態を確認してください。</li>
+      <li>ページを再読み込みしてみてください。</li>
+    </ul>
+  </div>
+  <script>
+    // ネットワーク回復時に自動リロード
+    window.addEventListener('online', () => location.reload());
+  </script>
+</body>
+</html>
