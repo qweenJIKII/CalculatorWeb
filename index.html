@@ -102,6 +102,10 @@
     /* 科学関数の折りたたみ: app[data-sci="off"] の間は非表示 */
     .app[data-sci="off"] .key[data-group="sci"] { display: none; }
 
+    /* 関数OFF時: 括弧2つで1行(4列)を埋めて次の行頭を揃える */
+    .app[data-sci="off"] .keys .key[data-val="("] { grid-column: span 2; }
+    .app[data-sci="off"] .keys .key[data-val=")"] { grid-column: span 2; }
+
     /* ボタンの動的サイズ（小画面で自動縮小） */
     button.key { padding: clamp(10px, 2vh, 14px) 0; font-size: clamp(16px, 2.4vh, 18px); }
 
