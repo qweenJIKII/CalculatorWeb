@@ -4,14 +4,16 @@
   - Network-first for navigation, fallback to cache, then offline page
   - Stale-while-revalidate for static assets
 */
-const VERSION = 'v1.1.2';
+const VERSION = 'v1.1.3';
 const CACHE_NAME = `calc-cache-${VERSION}`;
 const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './offline.html',
-  './help.html'
+  './help.html',
+  './memo.html',
+  './qr.html'
 ];
 
 self.addEventListener('install', (event) => {

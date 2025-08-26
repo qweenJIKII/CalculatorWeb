@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171a2b" />
+  <title>メモ | 簡易電卓</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; --danger:#ff6b6b; --ok:#4ade80; }
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%);
+      color:var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+      display:flex; align-items:flex-start; justify-content:center;
+      min-height:100dvh;
+      padding: 16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+      overflow:auto;
+    }
+    .app{ width:min(820px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; }
+    .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .content{ padding:16px 14px 20px; }
+
+    .input-row{ display:flex; gap:8px; }
+    .input-row input[type="text"]{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    .input-row button{ padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:600; cursor:pointer; }
+
+    .list{ margin-top:14px; display:grid; gap:8px; }
+    .item{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px 12px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+    .left{ display:flex; gap:10px; align-items:center; }
+    .title{ color:var(--text); }
+    .title.done{ color:var(--muted); text-decoration: line-through; opacity:.8; }
+    .controls{ display:flex; gap:8px; align-items:center; }
+    .controls button{ padding:6px 10px; font-size:12px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color:var(--text); cursor:pointer; }
+    .controls .del{ border-color: rgba(255,255,255,.18); color:#ffd2d2; }
+    .hint{ color:var(--muted); font-size:12px; margin-top:10px; }
+
+    @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="メモ">
+    <div class="header">
+      <div class="title">簡易電卓 - メモ</div>
+      <div style="color:var(--muted); font-size:12px;">日常タスクの簡易メモ</div>
+    </div>
+    <nav class="tabs" aria-label="ナビゲーション">
+      <a class="tab" href="./">電卓</a>
+      <a class="tab" href="./help.html">説明</a>
+      <a class="tab active" href="./memo.html">メモ</a>
+      <a class="tab" href="./qr.html">QR</a>
+    </nav>
+
+    <section class="content">
+      <div class="input-row">
+        <input id="taskInput" type="text" placeholder="タスクを入力して Enter または『追加』" aria-label="新規タスク" />
+        <button id="addBtn">追加</button>
+      </div>
+      <div class="hint">チェックで完了、ゴミ箱で削除。自動的に保存されます。</div>
+      <div id="list" class="list" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const KEY = 'calc_memo_tasks';
+      /** @type {{ id:string, title:string, done:boolean, ts:number }[]} */
+      const tasks = [];
+      const listEl = document.getElementById('list');
+      const inputEl = document.getElementById('taskInput');
+      const addBtn = document.getElementById('addBtn');
+
+      function uid(){ return Math.random().toString(36).slice(2, 10); }
+      function save(){ try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch(_){} }
+      function load(){
+        try {
+          const raw = JSON.parse(localStorage.getItem(KEY)||'[]');
+          if (Array.isArray(raw)) { tasks.splice(0, tasks.length, ...raw); }
+        } catch(_){}
+      }
+      function render(){
+        listEl.innerHTML = tasks.map(t => `
+          <div class="item" data-id="${t.id}">
+            <div class="left">
+              <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="完了">
+              <div class="title ${t.done ? 'done' : ''}">${escapeHtml(t.title)}</div>
+            </div>
+            <div class="controls">
+              <button class="del" aria-label="削除">削除</button>
+            </div>
+          </div>
+        `).join('');
+      }
+      function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+      function addTask(title){
+        const t = title.trim(); if (!t) return;
+        tasks.unshift({ id: uid(), title: t, done: false, ts: Date.now() });
+        save(); render(); inputEl.value=''; inputEl.focus();
+      }
+
+      listEl.addEventListener('click', (e) => {
+        const item = e.target.closest('.item'); if (!item) return;
+        const id = item.getAttribute('data-id');
+        if (e.target.matches('input[type="checkbox"]')){
+          const t = tasks.find(x=>x.id===id); if (!t) return; t.done = e.target.checked; save(); render(); return;
+        }
+        if (e.target.matches('.del')){
+          const idx = tasks.findIndex(x=>x.id===id); if (idx>=0) { tasks.splice(idx,1); save(); render(); }
+        }
+      });
+
+      inputEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') addTask(inputEl.value); });
+      addBtn.addEventListener('click', ()=> addTask(inputEl.value));
+
+      // SW registration
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(()=>{});
+        });
+      }
+
+      load(); render();
+    })();
+  </script>
+</body>
+</html>
