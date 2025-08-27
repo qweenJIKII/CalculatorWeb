@@ -21,8 +21,8 @@
     }
     .app{ width:min(820px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
     .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
-    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); }
-    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; flex:0 0 auto; white-space:nowrap; }
     .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
     .content{ padding:16px 14px 22px; }
 
@@ -180,6 +180,8 @@
       let mediaStream = null; let rafId = 0; let running = false; let detector = null;
       let videoTrack = null; let caps = null; let settings = null; let torchOn = false;
       let chosenBrowser = 'system'; let noDetectFrames = 0;
+      // zoom smoothing helpers
+      let zoomApplying = false; let pendingZoom = null; let zoomRafScheduled = false; let lastManualZoomTs = 0; let lastAppliedZoom = null;
 
       function buildQrUrl(u){
         return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(u);
@@ -379,10 +381,13 @@
           // Escalation: every 20 frames without detection, gently zoom in if possible
           noDetectFrames++;
           if ((noDetectFrames % 20 === 0) && caps?.zoom){
-            const cur = parseFloat(zoomRange.value||'1');
-            const step = (caps.zoom.step ?? 0.1) || 0.1;
-            const next = Math.min((caps.zoom.max ?? cur), cur + step);
-            if (next > cur){ zoomRange.value = String(next); await setZoom(next); }
+            const now = Date.now();
+            if ((now - lastManualZoomTs) > 1500 && !zoomApplying){
+              const cur = parseFloat(zoomRange.value||'1');
+              const step = (caps.zoom.step ?? 0.1) || 0.1;
+              const next = Math.min((caps.zoom.max ?? cur), cur + step);
+              if (next > cur){ zoomRange.value = String(next); await setZoom(next); }
+            }
           }
         };
 
@@ -398,11 +403,51 @@
       }
       function stopScan(){ running=false; cancelAnimationFrame(rafId); rafId=0; if (video){ try{ video.pause(); }catch(_){} video.srcObject = null; } if (mediaStream){ for (const t of mediaStream.getTracks?.()||[]){ try{ t.stop(); }catch(_){} } mediaStream=null; } videoTrack=null; caps=null; settings=null; }
 
-      async function setZoom(val){ if (!videoTrack || !caps?.zoom) return; try{ await videoTrack.applyConstraints({ advanced:[{ zoom: Math.max(caps.zoom.min, Math.min(caps.zoom.max, val)) }] }); }catch(_){} }
+      async function setZoom(val){
+        if (!videoTrack || !caps?.zoom) return;
+        const minZ = caps.zoom.min ?? 1;
+        const maxZ = caps.zoom.max ?? val;
+        const stepZ = caps.zoom.step ?? 0.1;
+        const roundToStep = (v)=> Math.max(minZ, Math.min(maxZ, (Math.round((v - minZ) / stepZ) * stepZ + minZ)));
+        const target = roundToStep(val);
+        // queue last-requested zoom while applying
+        pendingZoom = target;
+        if (zoomApplying) return;
+        zoomApplying = true;
+        try{
+          while (pendingZoom != null){
+            const z = pendingZoom; pendingZoom = null;
+            // skip if change is too small
+            if (lastAppliedZoom != null && Math.abs(z - lastAppliedZoom) < (stepZ * 0.5)){
+              continue;
+            }
+            try{
+              await videoTrack.applyConstraints({ advanced:[{ zoom: z }] });
+              lastAppliedZoom = z;
+            }catch(_){ /* ignore */ }
+            // yield a frame if more updates are queued to avoid jank
+            if (pendingZoom != null){ await new Promise(r=> requestAnimationFrame(()=> r())); }
+          }
+        } finally {
+          zoomApplying = false;
+        }
+      }
       async function applyDistanceZoom(){ if (!caps?.zoom) return; const min=caps.zoom.min??1, max=caps.zoom.max??1; let target=min; const mid = (min+max)/2; if (distanceSel.value==='near'){ target = Math.max(min, max*0.75); } else if (distanceSel.value==='standard'){ target = mid; } else { target = min; } zoomRange.value = target; await setZoom(target); }
 
       distanceSel.addEventListener('change', ()=>{ applyDistanceZoom(); });
-      zoomRange.addEventListener('input', ()=>{ setZoom(parseFloat(zoomRange.value)); });
+      // Throttle slider updates and record manual interaction timestamp
+      zoomRange.addEventListener('input', ()=>{
+        lastManualZoomTs = Date.now();
+        const z = parseFloat(zoomRange.value);
+        if (!zoomRafScheduled){
+          zoomRafScheduled = true;
+          requestAnimationFrame(()=>{ zoomRafScheduled = false; setZoom(z); });
+        } else {
+          pendingZoom = z;
+        }
+      });
+      // Ensure final value applied on release
+      zoomRange.addEventListener('change', ()=>{ const z = parseFloat(zoomRange.value); setZoom(z); });
       torchBtn.addEventListener('click', async ()=>{ if (!videoTrack) return; torchOn=!torchOn; try{ await videoTrack.applyConstraints({ advanced:[{ torch: torchOn }] }); }catch(_){ torchOn=!torchOn; } });
 
       function openWith(url, which){
@@ -430,7 +475,7 @@
       scanStart.addEventListener('click', startScan);
       scanStop.addEventListener('click', stopScan);
       scanCopy.addEventListener('click', async ()=>{ try{ await navigator.clipboard?.writeText(scanOut.textContent||''); }catch(_){} });
-      scanOpen.addEventListener('click', (e)=>{ e.preventDefault(); const url = scanOut.textContent||''; if (!url || url==='-') return; showOpenModal(url); });
+      scanOpen.addEventListener('click', (e)=>{ e.preventDefault(); const url = scanOut.textContent||''; if (!url || url==='-') return; openWith(url, chosenBrowser); });
       openWithSel.addEventListener('change', ()=>{ chosenBrowser = openWithSel.value || 'system'; updateModalSelection(chosenBrowser); });
 
       // Modal events

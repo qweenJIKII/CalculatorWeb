@@ -98,8 +98,8 @@
     .keys .wide-3 { grid-column: span 3; }
 
     /* Tabs (ヘッダー下の簡易ナビ) */
-    .tabs { display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
-    .tabs .tab { color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.02); font-size: 13px; }
+    .tabs { display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+    .tabs .tab { color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.02); font-size: 13px; flex:0 0 auto; white-space:nowrap; }
     .tabs .tab.active { color: var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
 
     /* 科学関数の折りたたみ: app[data-sci="off"] の間は非表示 */
