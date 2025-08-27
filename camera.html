@@ -77,7 +77,6 @@
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
       <a class="tab" href="./voice.html">音声</a>
-      <a class="tab" href="./ocr.html">OCR</a>
     </nav>
 
     <section class="content">
@@ -152,6 +151,8 @@
             </select>
           </label>
           <a id="scanOpen" class="tab" href="#" target="_blank" rel="noopener" style="text-decoration:none;">開く</a>
+          <button id="scanMakeQR" class="btn" title="スキャン結果でQRを作成">QR作成</button>
+          <button id="scanSaveQR" class="btn" title="スキャン結果のQRをPNG保存">QR保存</button>
         </div>
 
         <!-- Open With Modal -->
@@ -186,8 +187,9 @@
           <input id="file" type="file" accept="image/*" class="control" />
           <label class="hint">言語
             <select id="lang" class="control">
-              <option value="eng" selected>英語</option>
-              <option value="jpn">日本語</option>
+              <option value="jpn" selected>日本語</option>
+              <option value="jpn_vert">日本語(縦書き)</option>
+              <option value="eng">英語</option>
               <option value="jpn+eng">日本語+英語</option>
             </select>
           </label>
@@ -227,6 +229,9 @@
       tabQR.addEventListener('click', ()=> { selectTab('qr'); stopOcrCam(); });
       tabQRGen.addEventListener('click', ()=> { selectTab('qrgen'); stopScan(); stopOcrCam(); });
       tabOCR.addEventListener('click', ()=> { selectTab('ocr'); stopScan(); });
+      function selectByHash(){ const h=(location.hash||'').replace('#',''); if (h==='ocr'){ selectTab('ocr'); } else if (h==='qrgen'){ selectTab('qrgen'); } }
+      window.addEventListener('hashchange', selectByHash);
+      if (location.hash) selectByHash();
 
       // SW registration
       if ('serviceWorker' in navigator) {
@@ -253,7 +258,7 @@
       input?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') update(); });
       copyBtn?.addEventListener('click', async ()=>{ try { await navigator.clipboard.writeText(input.value); } catch(_){} });
       shareBtn?.addEventListener('click', async ()=>{ const data = { title:'簡易電卓', text: input.value, url: input.value }; if (navigator.share){ try{ await navigator.share(data); return; }catch(_){} } try{ await navigator.clipboard.writeText(input.value); }catch(_){} });
-      function presetUrl(kind){ const base=(p)=> new URL(p, location.href).href; if (kind==='app') return base('./'); if (kind==='memo') return base('./memo.html'); if (kind==='timer') return base('./timer.html'); if (kind==='convert') return base('./convert.html'); if (kind==='password') return base('./password.html'); if (kind==='voice') return base('./voice.html'); if (kind==='ocr') return base('./ocr.html'); if (kind==='here') return location.href; return base('./'); }
+      function presetUrl(kind){ const base=(p)=> new URL(p, location.href).href; if (kind==='app') return base('./'); if (kind==='memo') return base('./memo.html'); if (kind==='timer') return base('./timer.html'); if (kind==='convert') return base('./convert.html'); if (kind==='password') return base('./password.html'); if (kind==='voice') return base('./voice.html'); if (kind==='ocr') return base('./camera.html#ocr'); if (kind==='here') return location.href; return base('./'); }
       function applyPreset(){ if (!input || !presetSel) return; input.value = presetUrl(presetSel.value); update(); }
       applyPresetBtn?.addEventListener('click', applyPreset);
 
@@ -271,9 +276,11 @@
 
       const openModal = document.getElementById('openModal');
       const modalUrl = document.getElementById('modalUrl');
+      const scanMakeQR = document.getElementById('scanMakeQR');
+      const scanSaveQR = document.getElementById('scanSaveQR');
       let mediaStream = null, rafId = 0, running = false, detector = null;
       let videoTrack = null, caps = null, settings = null, torchOn = false;
-      let chosenBrowser = 'system', noDetectFrames = 0;
+      let chosenBrowser = (localStorage.getItem('openWith') || 'system'), noDetectFrames = 0;
       let zoomApplying = false, pendingZoom = null, zoomRafScheduled = false, lastManualZoomTs = 0, lastAppliedZoom = null;
 
       function setScanOut(text){ scanOut.textContent = text || '-'; scanOpen.href = text || '#'; }
@@ -283,7 +290,11 @@
       }
       function showOpenModal(url){ if (!url) return; modalUrl.textContent = url; chosenBrowser = openWithSel.value || chosenBrowser || 'system'; openWithSel.value = chosenBrowser; updateModalSelection(chosenBrowser); openModal.setAttribute('aria-hidden','false'); openModal.style.display='grid'; }
       function hideOpenModal(){ openModal.setAttribute('aria-hidden','true'); openModal.style.display='none'; }
-      function handleDetected(text){ if (!text) return; setScanOut(text); try{ navigator.vibrate?.(40); }catch(_){ } stopScan(); showOpenModal(text); }
+      function handleDetected(text){ if (!text) return; setScanOut(text); try{ navigator.vibrate?.(40); }catch(_){ }
+        // スキャン結果をQR作成パネルへ自動反映
+        try{ if (input){ input.value = text; update(); } }catch(_){ }
+        stopScan(); showOpenModal(text);
+      }
 
       async function startScan(){
         if (running) return; running = true; setScanOut('-'); hideOpenModal();
@@ -372,13 +383,19 @@
       scanStop.addEventListener('click', stopScan);
       scanCopy.addEventListener('click', async ()=>{ try{ await navigator.clipboard?.writeText(scanOut.textContent||''); }catch(_){} });
       scanOpen.addEventListener('click', (e)=>{ e.preventDefault(); const url = scanOut.textContent||''; if (!url || url==='-') return; showOpenModal(url); });
-      openWithSel.addEventListener('change', ()=>{ chosenBrowser = openWithSel.value || 'system'; updateModalSelection(chosenBrowser); });
-      updateModalSelection(openWithSel.value || chosenBrowser || 'system');
+      // スキャン結果でQR作成タブへ遷移
+      scanMakeQR?.addEventListener('click', ()=>{ const t = (scanOut.textContent||'').trim(); if (!t || t==='-') return; if (input){ input.value = t; update(); } try{ selectTab('qrgen'); location.hash = 'qrgen'; }catch(_){ } });
+      // スキャン結果のQRを即PNG保存（タブ遷移なし）
+      scanSaveQR?.addEventListener('click', ()=>{ const t = (scanOut.textContent||'').trim(); if (!t || t==='-') return; try{ const url = buildQrUrl(t); const a=document.createElement('a'); a.href=url; a.download='qr-from-scan.png'; document.body.appendChild(a); a.click(); a.remove(); }catch(_){ } });
+      openWithSel.addEventListener('change', ()=>{ chosenBrowser = openWithSel.value || 'system'; try{ localStorage.setItem('openWith', chosenBrowser); }catch(_){} updateModalSelection(chosenBrowser); });
+      // initialize selection from storage
+      if (openWithSel){ openWithSel.value = chosenBrowser; }
+      updateModalSelection(openWithSel?.value || chosenBrowser || 'system');
 
       openModal.addEventListener('click', (e)=>{ if (e.target === openModal) hideOpenModal(); });
       document.getElementById('modalClose').addEventListener('click', hideOpenModal);
       document.getElementById('modalCopy').addEventListener('click', ()=>{ try{ navigator.clipboard?.writeText(modalUrl.textContent||''); }catch(_){} });
-      openModal.addEventListener('click', (e)=>{ const btn = e.target.closest('button[data-open]'); if (!btn) return; chosenBrowser = btn.getAttribute('data-open') || 'system'; openWithSel.value = chosenBrowser; updateModalSelection(chosenBrowser); });
+      openModal.addEventListener('click', (e)=>{ const btn = e.target.closest('button[data-open]'); if (!btn) return; chosenBrowser = btn.getAttribute('data-open') || 'system'; if (openWithSel){ openWithSel.value = chosenBrowser; } try{ localStorage.setItem('openWith', chosenBrowser); }catch(_){} updateModalSelection(chosenBrowser); });
       document.getElementById('modalOpenNow').addEventListener('click', ()=>{ const url = modalUrl.textContent||''; hideOpenModal(); openWith(url, chosenBrowser); });
       window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && openModal.getAttribute('aria-hidden')==='false') hideOpenModal(); });
 
@@ -389,13 +406,14 @@
       const ocrCamStop = document.getElementById('ocrCamStop');
       const ocrCamShot = document.getElementById('ocrCamShot');
       const ocrCamShotRun = document.getElementById('ocrCamShotRun');
-      let ocrStream = null, ocrTrack = null;
+      let ocrStream = null, ocrTrack = null, ocrWorker = null;
       let image = null;
       if (ocr.file){ ocr.file.onchange = ()=>{ const f = ocr.file.files?.[0]; if (!f) return; image = f; const url = URL.createObjectURL(f); ocr.prev.src = url; }; }
       function stopOcrCam(){ if (ocrStream){ for (const t of ocrStream.getTracks?.()||[]){ try{ t.stop(); }catch(_){} } ocrStream=null; } if (ocrVideo){ try{ ocrVideo.pause(); }catch(_){} ocrVideo.srcObject=null; } ocrTrack=null; }
       async function startOcrCam(){ if (ocrStream) return; try{ const baseVideo={ facingMode:'environment' }; const candidates=[ { width:{ideal:2560}, height:{ideal:1440}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} }, { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} }, { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} }, { width:{ideal:1280}, height:{ideal:720} }, {} ]; let stream=null; for (const v of candidates){ try{ stream = await navigator.mediaDevices.getUserMedia({ video:{...baseVideo, ...v}, audio:false }); if (stream) break; }catch(_){ } } if (!stream){ alert('カメラにアクセスできません'); return; } ocrStream = stream; ocrVideo.srcObject = ocrStream; await ocrVideo.play().catch(()=>{}); ocrTrack = ocrStream.getVideoTracks?.()[0]||null; }catch(_){ alert('カメラ開始に失敗しました'); } }
       async function captureOcrFrame(){ if (!ocrVideo || !(ocrVideo.readyState>=2)) { alert('カメラが準備できていません'); return null; } const w=ocrVideo.videoWidth|0, h=ocrVideo.videoHeight|0; if(!w||!h){ alert('フレームを取得できません'); return null; } const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h; const ctx=canvas.getContext('2d',{ willReadFrequently:true }); ctx.drawImage(ocrVideo,0,0,w,h); const blob = await new Promise(res=> canvas.toBlob(res,'image/png',1)); if (blob){ const url = URL.createObjectURL(blob); ocr.prev.src = url; image = blob; } return blob; }
-      async function recognizeFrom(src){ try{ if (!src){ alert('画像が未選択です'); return; } setStatus('認識中...'); const { data } = await Tesseract.recognize(src, ocr.lang.value, { logger: m => { if (m.status && m.progress!=null){ setStatus(`${m.status} ${(m.progress*100).toFixed(0)}%`); } } }); ocr.out.value = data?.text || ''; setStatus('完了'); }catch(err){ setStatus('エラー'); console.error(err); } }
+      async function ensureOcrWorker(){ if (!ocrWorker){ setStatus('初期化中...'); ocrWorker = await Tesseract.createWorker({ logger: m => { if (m.status && m.progress!=null){ setStatus(`${m.status} ${(m.progress*100).toFixed(0)}%`); } } }); } }
+      async function recognizeFrom(src){ try{ if (!src){ alert('画像が未選択です'); return; } await ensureOcrWorker(); const lang = ocr.lang?.value || 'jpn'; setStatus('言語読み込み...'); await ocrWorker.loadLanguage(lang); await ocrWorker.initialize(lang); await ocrWorker.setParameters({ tessedit_pageseg_mode:'6', preserve_interword_spaces:'1', user_defined_dpi:'300', tessedit_ocr_engine_mode:'1' }); setStatus('認識中...'); const { data } = await ocrWorker.recognize(src); ocr.out.value = data?.text || ''; setStatus('完了'); }catch(err){ setStatus('エラー'); console.error(err); } }
       ocrCamStart?.addEventListener('click', startOcrCam);
       ocrCamStop?.addEventListener('click', stopOcrCam);
       ocrCamShot?.addEventListener('click', async ()=>{ await captureOcrFrame(); });
@@ -405,6 +423,20 @@
       if (ocr.copy){ ocr.copy.onclick = async ()=>{ try{ await navigator.clipboard?.writeText(ocr.out.value); }catch(_){} }; }
       if (ocr.share){ ocr.share.onclick = async ()=>{ const text = ocr.out.value; if (navigator.share){ try{ await navigator.share({ title:'OCR結果', text }); return; }catch(_){} } try{ await navigator.clipboard?.writeText(text); }catch(_){} }; }
       setStatus('準備OK');
+
+      // Auto stop when tab becomes hidden to release camera
+      document.addEventListener('visibilitychange', ()=>{ if (document.hidden){ try{ stopScan(); }catch(_){} try{ stopOcrCam(); }catch(_){} } });
+
+      // Cleanup on page hide/unload
+      const cleanup = async ()=>{
+        try{ stopScan(); }catch(_){ }
+        try{ stopOcrCam(); }catch(_){ }
+        try{ await ocrWorker?.terminate?.(); }catch(_){ try{ ocrWorker?.worker?.terminate?.(); }catch(_){} }
+      };
+      window.addEventListener('pagehide', cleanup);
+      window.addEventListener('beforeunload', (e)=>{ // fire-and-forget
+        cleanup();
+      });
     })();
   </script>
 </body>
