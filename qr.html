@@ -34,6 +34,10 @@
     .qrwrap img{ width:240px; height:240px; image-rendering: pixelated; }
     .hint{ color:var(--muted); font-size:12px; margin-top:10px; text-align:center; }
 
+    /* Scanner */
+    .scan{ margin-top:14px; display:grid; gap:8px; }
+    video.video{ width:100%; max-height:300px; background:#000; border-radius:12px; border:1px solid rgba(255,255,255,.08); }
+
     @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
   </style>
 </head>
@@ -48,9 +52,29 @@
       <a class="tab" href="./help.html">説明</a>
       <a class="tab" href="./memo.html">メモ</a>
       <a class="tab active" href="./qr.html">QR</a>
+      <a class="tab" href="./timer.html">タイマー</a>
+      <a class="tab" href="./convert.html">換算</a>
+      <a class="tab" href="./password.html">PW</a>
+      <a class="tab" href="./voice.html">音声</a>
+      <a class="tab" href="./ocr.html">OCR</a>
     </nav>
 
     <section class="content">
+      <div class="row" style="gap:8px; flex-wrap:wrap;">
+        <label style="color:var(--muted); font-size:12px;">プリセット
+          <select id="preset" style="margin-left:6px; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text);">
+            <option value="app">このアプリのトップ</option>
+            <option value="memo">メモ</option>
+            <option value="timer">タイマー</option>
+            <option value="convert">換算</option>
+            <option value="password">PW</option>
+            <option value="voice">音声</option>
+            <option value="ocr">OCR</option>
+            <option value="here">現在のページ</option>
+          </select>
+        </label>
+        <button id="applyPreset">適用</button>
+      </div>
       <div class="row">
         <input id="urlInput" type="url" placeholder="QR化するURL" aria-label="URL" />
         <button id="setBtn">更新</button>
@@ -64,9 +88,23 @@
         <a id="dlBtn" download="calculator-qr.png" class="tab" style="text-decoration:none;">PNG保存</a>
       </div>
       <div class="hint">QR画像はオンライン時に生成されます（api.qrserver.com）。オフライン時はページだけ開きます。</div>
+
+      <div class="scan" aria-label="カメラスキャン">
+        <div class="row" style="justify-content:center; flex-wrap:wrap; gap:8px;">
+          <button id="scanStart">カメラで読み取り</button>
+          <button id="scanStop">停止</button>
+          <span class="hint">結果: <span id="scanOut">-</span></span>
+        </div>
+        <video id="video" class="video" playsinline muted></video>
+        <div class="row" style="justify-content:center;">
+          <button id="scanCopy">コピー</button>
+          <a id="scanOpen" class="tab" href="#" target="_blank" rel="noopener" style="text-decoration:none;">開く</a>
+        </div>
+      </div>
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script>
     (function(){
       const input = document.getElementById('urlInput');
@@ -75,6 +113,17 @@
       const dlBtn = document.getElementById('dlBtn');
       const copyBtn = document.getElementById('copyBtn');
       const shareBtn = document.getElementById('shareBtn');
+      const presetSel = document.getElementById('preset');
+      const applyPresetBtn = document.getElementById('applyPreset');
+
+      // Scanner elements
+      const scanStart = document.getElementById('scanStart');
+      const scanStop = document.getElementById('scanStop');
+      const scanOut = document.getElementById('scanOut');
+      const scanCopy = document.getElementById('scanCopy');
+      const scanOpen = document.getElementById('scanOpen');
+      const video = document.getElementById('video');
+      let mediaStream = null; let rafId = 0; let running = false; let detector = null;
 
       function buildQrUrl(u){
         return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(u);
@@ -101,12 +150,70 @@
         try { await navigator.clipboard.writeText(input.value); } catch(_){}
       });
 
+      // Presets
+      function presetUrl(kind){
+        const base = (p)=> new URL(p, location.href).href;
+        if (kind==='app') return base('./');
+        if (kind==='memo') return base('./memo.html');
+        if (kind==='timer') return base('./timer.html');
+        if (kind==='convert') return base('./convert.html');
+        if (kind==='password') return base('./password.html');
+        if (kind==='voice') return base('./voice.html');
+        if (kind==='ocr') return base('./ocr.html');
+        if (kind==='here') return location.href;
+        return base('./');
+      }
+      function applyPreset(){ input.value = presetUrl(presetSel.value); update(); }
+      applyPresetBtn.addEventListener('click', applyPreset);
+
       // SW registration
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js').catch(()=>{});
         });
       }
+
+      // ========== Camera Scan ==========
+      function setScanOut(text){ scanOut.textContent = text || '-'; scanOpen.href = text || '#'; }
+      function handleDetected(text){ if (!text) return; setScanOut(text); try{ navigator.vibrate?.(40); }catch(_){} input.value = text; update(); }
+
+      async function startScan(){
+        if (running) return; running = true; setScanOut('-');
+        try{
+          mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        }catch(err){ running=false; alert('カメラにアクセスできません'); return; }
+        video.srcObject = mediaStream; await video.play().catch(()=>{});
+
+        if (window.BarcodeDetector){ try{ detector = new window.BarcodeDetector({ formats: ['qr_code'] }); }catch(_){ detector = null; } }
+
+        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const loop = async () => {
+          if (!running) return;
+          if (video.readyState >= 2){
+            const w = video.videoWidth; const h = video.videoHeight;
+            if (w && h){
+              if (detector){
+                try{
+                  const codes = await detector.detect(video);
+                  if (codes && codes.length){ handleDetected(codes[0].rawValue || codes[0].rawValue); }
+                }catch(_){}
+              } else if (window.jsQR){
+                canvas.width = w; canvas.height = h; ctx.drawImage(video, 0, 0, w, h);
+                const img = ctx.getImageData(0, 0, w, h);
+                const res = window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+                if (res && res.data){ handleDetected(res.data); }
+              }
+            }
+          }
+          rafId = requestAnimationFrame(loop);
+        };
+        rafId = requestAnimationFrame(loop);
+      }
+      function stopScan(){ running=false; cancelAnimationFrame(rafId); rafId=0; if (video){ try{ video.pause(); }catch(_){} video.srcObject = null; } if (mediaStream){ for (const t of mediaStream.getTracks?.()||[]){ try{ t.stop(); }catch(_){} } mediaStream=null; } }
+
+      scanStart.addEventListener('click', startScan);
+      scanStop.addEventListener('click', stopScan);
+      scanCopy.addEventListener('click', async ()=>{ try{ await navigator.clipboard?.writeText(scanOut.textContent||''); }catch(_){} });
     })();
   </script>
 </body>

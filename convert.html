@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171a2b" />
+  <title>換算 | 簡易電卓</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; }
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%);
+      color:var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+      display:flex; align-items:flex-start; justify-content:center;
+      min-height:100dvh; padding: 16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+    }
+    .app{ width:min(820px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; }
+    .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .content{ padding:16px 14px 22px; display:grid; gap:14px; }
+
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input, select { padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    input[type="number"]{ width:160px; }
+    .result{ font-size:28px; font-weight:700; text-align:center; padding:10px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+
+    @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="換算">
+    <div class="header">
+      <div class="title">簡易電卓 - 換算</div>
+      <div style="color:var(--muted); font-size:12px;">長さ/重さ/温度</div>
+    </div>
+    <nav class="tabs" aria-label="ナビゲーション">
+      <a class="tab" href="./">電卓</a>
+      <a class="tab" href="./help.html">説明</a>
+      <a class="tab" href="./memo.html">メモ</a>
+      <a class="tab" href="./qr.html">QR</a>
+      <a class="tab" href="./timer.html">タイマー</a>
+      <a class="tab active" href="./convert.html">換算</a>
+      <a class="tab" href="./password.html">PW</a>
+      <a class="tab" href="./voice.html">音声</a>
+      <a class="tab" href="./ocr.html">OCR</a>
+    </nav>
+
+    <section class="content">
+      <div class="row">
+        <label>カテゴリ
+          <select id="category">
+            <option value="length">長さ</option>
+            <option value="mass">重さ</option>
+            <option value="temp">温度</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <input id="inputVal" type="number" step="any" placeholder="値" />
+        <select id="fromUnit"></select>
+        <span style="opacity:.7">→</span>
+        <select id="toUnit"></select>
+      </div>
+      <div id="result" class="result">0</div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const el = {
+        cat: document.getElementById('category'),
+        val: document.getElementById('inputVal'),
+        from: document.getElementById('fromUnit'),
+        to: document.getElementById('toUnit'),
+        res: document.getElementById('result'),
+      };
+      const UNITS = {
+        length: {
+          base: 'm', // base meter
+          list: ['mm','cm','m','km'],
+          toBase: { mm:v=>v/1000, cm:v=>v/100, m:v=>v, km:v=>v*1000 },
+          fromBase: { mm:v=>v*1000, cm:v=>v*100, m:v=>v, km:v=>v/1000 },
+        },
+        mass: {
+          base: 'kg',
+          list: ['g','kg','lb'],
+          toBase: { g:v=>v/1000, kg:v=>v, lb:v=>v*0.45359237 },
+          fromBase: { g:v=>v*1000, kg:v=>v, lb:v=>v/0.45359237 },
+        },
+        temp: {
+          base: 'C',
+          list: ['C','F','K'],
+          toBase: { C:v=>v, F:v=>(v-32)*5/9, K:v=>v-273.15 },
+          fromBase: { C:v=>v, F:v=>v*9/5+32, K:v=>v+273.15 },
+        },
+      };
+      function fillUnits(){
+        const cat = el.cat.value; const u = UNITS[cat];
+        el.from.innerHTML = u.list.map(x=>`<option value="${x}">${x}</option>`).join('');
+        el.to.innerHTML = u.list.map(x=>`<option value="${x}">${x}</option>`).join('');
+        if (cat==='length'){ el.from.value='m'; el.to.value='km'; }
+        if (cat==='mass'){ el.from.value='kg'; el.to.value='g'; }
+        if (cat==='temp'){ el.from.value='C'; el.to.value='F'; }
+        compute();
+      }
+      function compute(){
+        const cat = el.cat.value; const u = UNITS[cat];
+        const v = Number(el.val.value);
+        if (!Number.isFinite(v)) { el.res.textContent = '0'; return; }
+        let base = u.toBase[el.from.value](v);
+        let out = u.fromBase[el.to.value](base);
+        const rounded = (cat==='temp') ? out.toFixed(2) : (Math.round(out*1e6)/1e6).toString();
+        el.res.textContent = rounded;
+      }
+      el.cat.onchange = fillUnits;
+      el.val.oninput = compute; el.from.onchange = compute; el.to.onchange = compute;
+
+      // SW register
+      if ('serviceWorker' in navigator) { window.addEventListener('load',()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
+
+      fillUnits();
+    })();
+  </script>
+</body>
+</html>

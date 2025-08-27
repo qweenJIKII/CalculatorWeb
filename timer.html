@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171a2b" />
+  <title>タイマー | 簡易電卓</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; --ok:#4ade80; --danger:#ff6b6b; }
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%);
+      color:var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+      display:flex; align-items:flex-start; justify-content:center;
+      min-height:100dvh; padding: 16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+    }
+    .app{ width:min(820px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; }
+    .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .content{ padding:16px 14px 22px; display:grid; gap:14px; }
+
+    .display{ font-size:64px; font-weight:800; text-align:center; letter-spacing:2px; }
+    .controls{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+    .controls button{ padding:10px 16px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:700; cursor:pointer; }
+
+    .settings{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; }
+    .settings input{ width:84px; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    .cycle{ color:var(--muted); font-size:12px; text-align:center; }
+
+    .sessions{ margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+    .pill{ font-size:12px; padding:4px 8px; border-radius:999px; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); color:var(--muted); }
+
+    @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } .display{ font-size:48px; } }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="タイマー">
+    <div class="header">
+      <div class="title">簡易電卓 - タイマー</div>
+      <div style="color:var(--muted); font-size:12px;">ポモドーロ</div>
+    </div>
+    <nav class="tabs" aria-label="ナビゲーション">
+      <a class="tab" href="./">電卓</a>
+      <a class="tab" href="./help.html">説明</a>
+      <a class="tab" href="./memo.html">メモ</a>
+      <a class="tab" href="./qr.html">QR</a>
+      <a class="tab active" href="./timer.html">タイマー</a>
+      <a class="tab" href="./convert.html">換算</a>
+      <a class="tab" href="./password.html">PW</a>
+      <a class="tab" href="./voice.html">音声</a>
+      <a class="tab" href="./ocr.html">OCR</a>
+    </nav>
+
+    <section class="content">
+      <div id="display" class="display">25:00</div>
+      <div class="controls">
+        <button id="startBtn">開始</button>
+        <button id="pauseBtn">一時停止</button>
+        <button id="resetBtn">リセット</button>
+        <button id="nextBtn">次へ</button>
+      </div>
+      <div class="settings">
+        <label>作業(分) <input id="workMin" type="number" min="1" step="1"></label>
+        <label>短休(分) <input id="shortMin" type="number" min="1" step="1"></label>
+        <label>長休(分) <input id="longMin" type="number" min="1" step="1"></label>
+        <label>ラウンド <input id="rounds" type="number" min="1" step="1"></label>
+      </div>
+      <div id="cycle" class="cycle">状態: 作業 1/4</div>
+      <div id="sessions" class="sessions"></div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const S = {
+        work: +(localStorage.getItem('timer_work')||25),
+        short: +(localStorage.getItem('timer_short')||5),
+        long: +(localStorage.getItem('timer_long')||15),
+        rounds: +(localStorage.getItem('timer_rounds')||4),
+      };
+      const el = {
+        disp: document.getElementById('display'),
+        start: document.getElementById('startBtn'),
+        pause: document.getElementById('pauseBtn'),
+        reset: document.getElementById('resetBtn'),
+        next: document.getElementById('nextBtn'),
+        work: document.getElementById('workMin'),
+        short: document.getElementById('shortMin'),
+        long: document.getElementById('longMin'),
+        rounds: document.getElementById('rounds'),
+        cycle: document.getElementById('cycle'),
+        sessions: document.getElementById('sessions'),
+      };
+      el.work.value = S.work; el.short.value = S.short; el.long.value = S.long; el.rounds.value = S.rounds;
+
+      let timer=null, endAt=0, phase='work', count=0; // count=作業数
+
+      function saveSettings(){ localStorage.setItem('timer_work', el.work.value); localStorage.setItem('timer_short', el.short.value); localStorage.setItem('timer_long', el.long.value); localStorage.setItem('timer_rounds', el.rounds.value); }
+      el.work.onchange = saveSettings; el.short.onchange = saveSettings; el.long.onchange = saveSettings; el.rounds.onchange = saveSettings;
+
+      function mmss(ms){ const t = Math.max(0, Math.floor(ms/1000)); const m=('0'+Math.floor(t/60)).slice(-2); const s=('0'+(t%60)).slice(-2); return m+':'+s; }
+      function vibrate(){ try{ navigator.vibrate?.(200); }catch(_){} }
+      function notify(text){ try{ if (Notification?.permission==='granted'){ new Notification(text); } else if (Notification && Notification.permission!=='denied'){ Notification.requestPermission(); } }catch(_){} }
+
+      function setPhase(p){ phase=p; if (p==='work'){ endAt = Date.now()+ S.work*60*1000; el.cycle.textContent = `状態: 作業 ${count+1}/${el.rounds.value}`; }
+        else if (p==='short'){ endAt = Date.now()+ S.short*60*1000; el.cycle.textContent = '状態: 短い休憩'; }
+        else { endAt = Date.now()+ S.long*60*1000; el.cycle.textContent = '状態: 長い休憩'; }
+      }
+      function renderSessions(){
+        const arr=[]; for(let i=0;i<count;i++) arr.push('<span class="pill">作業</span>'); el.sessions.innerHTML = arr.join(' ');
+      }
+      function tick(){ const remain = endAt - Date.now(); el.disp.textContent = mmss(remain); if (remain<=0){ clearInterval(timer); timer=null; vibrate(); if (phase==='work'){ count++; renderSessions(); const goal = +el.rounds.value; if (count%goal===0){ setPhase('long'); notify('長い休憩'); } else { setPhase('short'); notify('短い休憩'); } } else { setPhase('work'); notify('作業再開'); } start(); } }
+
+      function start(){ if (timer) return; timer = setInterval(tick, 200); }
+      function pause(){ if (!timer) return; clearInterval(timer); timer=null; }
+      function reset(){ pause(); count=0; renderSessions(); setPhase('work'); el.disp.textContent = mmss(S.work*60*1000); }
+      function next(){ pause(); if (phase==='work'){ count++; renderSessions(); const goal = +el.rounds.value; if (count%goal===0){ setPhase('long'); } else { setPhase('short'); } } else { setPhase('work'); } start(); }
+
+      el.start.onclick = ()=>{ if (!timer){ if (!endAt) setPhase(phase); start(); } };
+      el.pause.onclick = ()=> pause();
+      el.reset.onclick = ()=> reset();
+      el.next.onclick = ()=> next();
+
+      // SW
+      if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
+
+      reset();
+    })();
+  </script>
+</body>
+</html>
