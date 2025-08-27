@@ -37,8 +37,18 @@
     /* Scanner */
     .scan{ margin-top:14px; display:grid; gap:8px; }
     video.video{ width:100%; max-height:300px; background:#000; border-radius:12px; border:1px solid rgba(255,255,255,.08); }
+    .control{ padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
 
     @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
+
+    /* Modal */
+    .modal{ position:fixed; inset:0; display:none; place-items:center; background: rgba(0,0,0,.45); z-index:1000; }
+    .modal[aria-hidden="false"]{ display:grid; }
+    .modal-panel{ width:min(460px, 92vw); background: linear-gradient(180deg, var(--panel), var(--panel-2)); border:1px solid rgba(255,255,255,.12); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.45); padding:14px; }
+    .modal-title{ font-weight:600; margin-bottom:8px; }
+    .modal-url{ font-size:12px; color:var(--muted); word-break:break-all; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); padding:8px; border-radius:8px; }
+    .modal-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .btn{ padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:600; cursor:pointer; }
   </style>
 </head>
 <body>
@@ -93,12 +103,50 @@
         <div class="row" style="justify-content:center; flex-wrap:wrap; gap:8px;">
           <button id="scanStart">カメラで読み取り</button>
           <button id="scanStop">停止</button>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            距離
+            <select id="scanDistance" class="control">
+              <option value="standard">標準</option>
+              <option value="near">近距離</option>
+              <option value="far">遠距離</option>
+            </select>
+          </label>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            ズーム
+            <input id="scanZoom" class="control" type="range" min="1" max="1" step="0.1" value="1" style="width:140px;">
+          </label>
+          <button id="scanTorch" title="ライト切替">ライト</button>
           <span class="hint">結果: <span id="scanOut">-</span></span>
         </div>
         <video id="video" class="video" playsinline muted></video>
-        <div class="row" style="justify-content:center;">
+        <div class="row" style="justify-content:center; gap:8px; flex-wrap:wrap;">
           <button id="scanCopy">コピー</button>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            開くブラウザ
+            <select id="scanOpenWith" class="control">
+              <option value="system">システム既定</option>
+              <option value="chrome">Chrome</option>
+              <option value="firefox">Firefox</option>
+              <option value="edge">Edge</option>
+            </select>
+          </label>
           <a id="scanOpen" class="tab" href="#" target="_blank" rel="noopener" style="text-decoration:none;">開く</a>
+        </div>
+      </div>
+
+      <!-- Open With Modal -->
+      <div id="openModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-panel">
+          <div class="modal-title">開くブラウザを選択</div>
+          <div id="modalUrl" class="modal-url"></div>
+          <div class="modal-actions">
+            <button class="btn" data-open="system">システム既定</button>
+            <button class="btn" data-open="chrome">Chrome</button>
+            <button class="btn" data-open="firefox">Firefox</button>
+            <button class="btn" data-open="edge">Edge</button>
+            <button class="btn" id="modalCopy">コピー</button>
+            <button class="btn" id="modalClose">キャンセル</button>
+          </div>
         </div>
       </div>
     </section>
@@ -123,7 +171,12 @@
       const scanCopy = document.getElementById('scanCopy');
       const scanOpen = document.getElementById('scanOpen');
       const video = document.getElementById('video');
+      const distanceSel = document.getElementById('scanDistance');
+      const zoomRange = document.getElementById('scanZoom');
+      const torchBtn = document.getElementById('scanTorch');
+      const openWithSel = document.getElementById('scanOpenWith');
       let mediaStream = null; let rafId = 0; let running = false; let detector = null;
+      let videoTrack = null; let caps = null; let settings = null; let torchOn = false;
 
       function buildQrUrl(u){
         return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(u);
@@ -174,46 +227,165 @@
       }
 
       // ========== Camera Scan ==========
+      // Modal open-with helpers
+      const openModal = document.getElementById('openModal');
+      const modalUrl = document.getElementById('modalUrl');
+      const modalCopy = () => { try{ navigator.clipboard?.writeText(modalUrl.textContent||''); }catch(_){} };
+      function showOpenModal(url){ if (!url) return; modalUrl.textContent = url; openModal.setAttribute('aria-hidden','false'); openModal.style.display='grid'; }
+      function hideOpenModal(){ openModal.setAttribute('aria-hidden','true'); openModal.style.display='none'; }
+
       function setScanOut(text){ scanOut.textContent = text || '-'; scanOpen.href = text || '#'; }
-      function handleDetected(text){ if (!text) return; setScanOut(text); try{ navigator.vibrate?.(40); }catch(_){} input.value = text; update(); }
+      function handleDetected(text){
+        if (!text) return;
+        setScanOut(text);
+        try{ navigator.vibrate?.(40); }catch(_){ }
+        input.value = text; update();
+        // Stop scanning and show browser selection modal
+        stopScan();
+        showOpenModal(text);
+      }
 
       async function startScan(){
         if (running) return; running = true; setScanOut('-');
+        hideOpenModal();
         try{
-          mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: 'environment',
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: false
+          });
         }catch(err){ running=false; alert('カメラにアクセスできません'); return; }
         video.srcObject = mediaStream; await video.play().catch(()=>{});
+
+        // Track capabilities (zoom/torch)
+        videoTrack = mediaStream.getVideoTracks?.()[0] || null;
+        caps = videoTrack?.getCapabilities?.() || null;
+        settings = videoTrack?.getSettings?.() || null;
+        // Try to enable continuous focus/exposure/whiteBalance if available
+        try{
+          const adv = [];
+          if (caps?.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) adv.push({ focusMode: 'continuous' });
+          if (caps?.exposureMode && Array.isArray(caps.exposureMode) && caps.exposureMode.includes('continuous')) adv.push({ exposureMode: 'continuous' });
+          if (caps?.whiteBalanceMode && Array.isArray(caps.whiteBalanceMode) && caps.whiteBalanceMode.includes('continuous')) adv.push({ whiteBalanceMode: 'continuous' });
+          if (adv.length) await videoTrack.applyConstraints({ advanced: adv });
+        }catch(_){ /* noop */ }
+        // Zoom UI setup
+        if (caps?.zoom){
+          zoomRange.min = caps.zoom.min ?? 1;
+          zoomRange.max = caps.zoom.max ?? 1;
+          zoomRange.step = caps.zoom.step ?? 0.1;
+          zoomRange.value = settings?.zoom ?? caps.zoom.min ?? 1;
+          zoomRange.disabled = false;
+        } else {
+          zoomRange.disabled = true;
+        }
+        // Torch UI
+        if (caps && 'torch' in caps){
+          torchBtn.disabled = false;
+        } else {
+          torchBtn.disabled = true;
+        }
 
         if (window.BarcodeDetector){ try{ detector = new window.BarcodeDetector({ formats: ['qr_code'] }); }catch(_){ detector = null; } }
 
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        const loop = async () => {
+        // Initial zoom by distance mode
+        await applyDistanceZoom();
+
+        // Frame scanner
+        const scanOnce = async () => {
           if (!running) return;
-          if (video.readyState >= 2){
-            const w = video.videoWidth; const h = video.videoHeight;
-            if (w && h){
-              if (detector){
-                try{
-                  const codes = await detector.detect(video);
-                  if (codes && codes.length){ handleDetected(codes[0].rawValue || codes[0].rawValue); }
-                }catch(_){}
-              } else if (window.jsQR){
-                canvas.width = w; canvas.height = h; ctx.drawImage(video, 0, 0, w, h);
-                const img = ctx.getImageData(0, 0, w, h);
-                const res = window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
-                if (res && res.data){ handleDetected(res.data); }
-              }
-            }
+          if (!(video && video.readyState >= 2)) return;
+          const w = video.videoWidth|0, h = video.videoHeight|0; if (!w || !h) return;
+
+          // 1) BarcodeDetector first (fast path)
+          if (detector){
+            try{
+              const codes = await detector.detect(video);
+              if (codes && codes.length){ handleDetected(codes[0].rawValue || codes[0].rawValue); return; }
+            }catch(_){ /* fallthrough */ }
           }
-          rafId = requestAnimationFrame(loop);
+
+          // 2) jsQR multi-pass: full frame then center crop, always attemptBoth
+          if (window.jsQR){
+            // full frame
+            canvas.width = w; canvas.height = h; ctx.drawImage(video, 0, 0, w, h);
+            let img = ctx.getImageData(0, 0, w, h);
+            let res = window.jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
+            if (res && res.data){ handleDetected(res.data); return; }
+
+            // center crop (80%)
+            const cw = Math.floor(w * 0.8), ch = Math.floor(h * 0.8);
+            const sx = Math.floor((w - cw) / 2), sy = Math.floor((h - ch) / 2);
+            const crop = ctx.getImageData(sx, sy, cw, ch);
+            res = window.jsQR(crop.data, cw, ch, { inversionAttempts: 'attemptBoth' });
+            if (res && res.data){ handleDetected(res.data); return; }
+          }
         };
-        rafId = requestAnimationFrame(loop);
+
+        // Schedule scanning with requestVideoFrameCallback when available
+        const useRVFC = typeof video.requestVideoFrameCallback === 'function';
+        if (useRVFC){
+          const cb = async () => { if (!running) return; await scanOnce(); video.requestVideoFrameCallback(cb); };
+          video.requestVideoFrameCallback(cb);
+        } else {
+          const loop = async () => { if (!running) return; await scanOnce(); rafId = requestAnimationFrame(loop); };
+          rafId = requestAnimationFrame(loop);
+        }
       }
-      function stopScan(){ running=false; cancelAnimationFrame(rafId); rafId=0; if (video){ try{ video.pause(); }catch(_){} video.srcObject = null; } if (mediaStream){ for (const t of mediaStream.getTracks?.()||[]){ try{ t.stop(); }catch(_){} } mediaStream=null; } }
+      function stopScan(){ running=false; cancelAnimationFrame(rafId); rafId=0; if (video){ try{ video.pause(); }catch(_){} video.srcObject = null; } if (mediaStream){ for (const t of mediaStream.getTracks?.()||[]){ try{ t.stop(); }catch(_){} } mediaStream=null; } videoTrack=null; caps=null; settings=null; }
+
+      async function setZoom(val){ if (!videoTrack || !caps?.zoom) return; try{ await videoTrack.applyConstraints({ advanced:[{ zoom: Math.max(caps.zoom.min, Math.min(caps.zoom.max, val)) }] }); }catch(_){} }
+      async function applyDistanceZoom(){ if (!caps?.zoom) return; const min=caps.zoom.min??1, max=caps.zoom.max??1; let target=min; const mid = (min+max)/2; if (distanceSel.value==='near'){ target = Math.max(min, max*0.75); } else if (distanceSel.value==='standard'){ target = mid; } else { target = min; } zoomRange.value = target; await setZoom(target); }
+
+      distanceSel.addEventListener('change', ()=>{ applyDistanceZoom(); });
+      zoomRange.addEventListener('input', ()=>{ setZoom(parseFloat(zoomRange.value)); });
+      torchBtn.addEventListener('click', async ()=>{ if (!videoTrack) return; torchOn=!torchOn; try{ await videoTrack.applyConstraints({ advanced:[{ torch: torchOn }] }); }catch(_){ torchOn=!torchOn; } });
+
+      function openWith(url, which){
+        try{
+          if (!url) return;
+          if (which==='system'){ window.open(url, '_blank', 'noopener'); return; }
+          const u = new URL(url);
+          const scheme = u.protocol.replace(':','');
+          const hostAndPath = url.replace(/^https?:\/\//,'');
+          const isAndroid = /Android/i.test(navigator.userAgent);
+          const isWindows = /Windows/i.test(navigator.userAgent);
+          if (isAndroid){
+            const pkg = (which==='chrome') ? 'com.android.chrome' : (which==='firefox') ? 'org.mozilla.firefox' : (which==='edge') ? 'com.microsoft.emmx' : '';
+            if (pkg){ const intentUrl = `intent://${hostAndPath}#Intent;scheme=${scheme};package=${pkg};end`; window.location.href = intentUrl; return; }
+          }
+          if (isWindows && which==='edge'){
+            const edgeUrl = `microsoft-edge:${url}`; window.location.href = edgeUrl; return; }
+          // Not supported to force Chrome/Firefox on desktop web – fallback
+          alert('この端末では選択したブラウザを直接指定できないため、規定のブラウザで開きます。必要に応じてURLをコピーしてお好みのブラウザで開いてください。');
+          // fallback
+          window.open(url, '_blank', 'noopener');
+        }catch(_){ window.open(url, '_blank', 'noopener'); }
+      }
 
       scanStart.addEventListener('click', startScan);
       scanStop.addEventListener('click', stopScan);
       scanCopy.addEventListener('click', async ()=>{ try{ await navigator.clipboard?.writeText(scanOut.textContent||''); }catch(_){} });
+      scanOpen.addEventListener('click', (e)=>{ e.preventDefault(); const url = scanOut.textContent||''; if (!url || url==='-') return; showOpenModal(url); });
+
+      // Modal events
+      openModal.addEventListener('click', (e)=>{ if (e.target === openModal) hideOpenModal(); });
+      document.getElementById('modalClose').addEventListener('click', hideOpenModal);
+      document.getElementById('modalCopy').addEventListener('click', modalCopy);
+      openModal.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button[data-open]');
+        if (!btn) return;
+        const which = btn.getAttribute('data-open');
+        const url = modalUrl.textContent||'';
+        hideOpenModal();
+        openWith(url, which);
+      });
+      // ESC to close modal
+      window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && openModal.getAttribute('aria-hidden')==='false') hideOpenModal(); });
     })();
   </script>
 </body>
