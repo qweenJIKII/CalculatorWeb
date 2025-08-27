@@ -36,6 +36,10 @@
     .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .control{ padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
     button.btn{ padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:700; cursor:pointer; }
+    /* QR generator */
+    .qrwrap{ margin-top:14px; display:grid; place-items:center; padding:16px; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+    .qrwrap img{ width:240px; height:240px; image-rendering: pixelated; }
+    .row input{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
 
     /* QR scanner */
     video.video{ width:100%; max-height:320px; background:#000; border-radius:12px; border:1px solid rgba(255,255,255,.08); }
@@ -68,7 +72,6 @@
       <a class="tab" href="./">電卓</a>
       <a class="tab" href="./help.html">説明</a>
       <a class="tab" href="./memo.html">メモ</a>
-      <a class="tab" href="./qr.html">QR</a>
       <a class="tab active" href="./camera.html">カメラ</a>
       <a class="tab" href="./timer.html">タイマー</a>
       <a class="tab" href="./convert.html">換算</a>
@@ -80,8 +83,41 @@
     <section class="content">
       <div class="inner-tabs" role="tablist" aria-label="カメラモード">
         <button id="tabQR" class="inner-tab" role="tab" aria-selected="true" aria-controls="panelQR">QRスキャン</button>
+        <button id="tabQRGen" class="inner-tab" role="tab" aria-selected="false" aria-controls="panelQRGen">QR作成</button>
         <button id="tabOCR" class="inner-tab" role="tab" aria-selected="false" aria-controls="panelOCR">OCR</button>
       </div>
+
+      <!-- QR作成 Panel -->
+      <section id="panelQRGen" class="panel" role="tabpanel" aria-hidden="true">
+        <div class="row" style="gap:8px;">
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">プリセット
+            <select id="preset" class="control" style="margin-left:6px;">
+              <option value="app">このアプリのトップ</option>
+              <option value="memo">メモ</option>
+              <option value="timer">タイマー</option>
+              <option value="convert">換算</option>
+              <option value="password">PW</option>
+              <option value="voice">音声</option>
+              <option value="ocr">OCR</option>
+              <option value="here">現在のページ</option>
+            </select>
+          </label>
+          <button id="applyPreset" class="btn">適用</button>
+        </div>
+        <div class="row">
+          <input id="urlInput" type="url" placeholder="QR化するURL" aria-label="URL" />
+          <button id="setBtn" class="btn">更新</button>
+        </div>
+        <div class="qrwrap">
+          <img id="qrImg" alt="QRコード" src="" />
+        </div>
+        <div class="row" style="margin-top:10px; justify-content:center;">
+          <button id="copyBtn" class="btn">URLをコピー</button>
+          <button id="shareBtn" class="btn">共有</button>
+          <a id="dlBtn" download="calculator-qr.png" class="tab" style="text-decoration:none;">PNG保存</a>
+        </div>
+        <div class="hint">QR画像はオンライン時に生成されます（api.qrserver.com）。オフライン時はページだけ開きます。</div>
+      </section>
 
       <!-- QR Panel -->
       <section id="panelQR" class="panel" role="tabpanel" aria-hidden="false">
@@ -172,17 +208,24 @@
     (function(){
       // inner tab switching
       const tabQR = document.getElementById('tabQR');
+      const tabQRGen = document.getElementById('tabQRGen');
       const tabOCR = document.getElementById('tabOCR');
       const panelQR = document.getElementById('panelQR');
+      const panelQRGen = document.getElementById('panelQRGen');
       const panelOCR = document.getElementById('panelOCR');
       function selectTab(which){
-        const qr = which === 'qr';
-        tabQR.setAttribute('aria-selected', qr ? 'true':'false');
-        tabOCR.setAttribute('aria-selected', qr ? 'false':'true');
-        panelQR.setAttribute('aria-hidden', qr ? 'false':'true');
-        panelOCR.setAttribute('aria-hidden', qr ? 'true':'false');
+        const isQR = which === 'qr';
+        const isQRGen = which === 'qrgen';
+        const isOCR = which === 'ocr';
+        tabQR.setAttribute('aria-selected', isQR ? 'true':'false');
+        tabQRGen.setAttribute('aria-selected', isQRGen ? 'true':'false');
+        tabOCR.setAttribute('aria-selected', isOCR ? 'true':'false');
+        panelQR.setAttribute('aria-hidden', isQR ? 'false':'true');
+        panelQRGen.setAttribute('aria-hidden', isQRGen ? 'false':'true');
+        panelOCR.setAttribute('aria-hidden', isOCR ? 'false':'true');
       }
       tabQR.addEventListener('click', ()=> { selectTab('qr'); stopOcrCam(); });
+      tabQRGen.addEventListener('click', ()=> { selectTab('qrgen'); stopScan(); stopOcrCam(); });
       tabOCR.addEventListener('click', ()=> { selectTab('ocr'); stopScan(); });
 
       // SW registration
@@ -191,6 +234,28 @@
           navigator.serviceWorker.register('./sw.js').catch(()=>{});
         });
       }
+
+      // ===== QR Generator (from qr.html) =====
+      const input = document.getElementById('urlInput');
+      const img = document.getElementById('qrImg');
+      const setBtn = document.getElementById('setBtn');
+      const dlBtn = document.getElementById('dlBtn');
+      const copyBtn = document.getElementById('copyBtn');
+      const shareBtn = document.getElementById('shareBtn');
+      const presetSel = document.getElementById('preset');
+      const applyPresetBtn = document.getElementById('applyPreset');
+
+      function buildQrUrl(u){ return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(u); }
+      function update(){ const url = (input?.value || '').trim(); if (!url) return; const src = buildQrUrl(url); if (img) img.src = src; if (dlBtn) dlBtn.href = src; }
+      const defaultUrl = new URL('./', location.href).href;
+      if (input){ input.value = defaultUrl; update(); }
+      setBtn?.addEventListener('click', update);
+      input?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') update(); });
+      copyBtn?.addEventListener('click', async ()=>{ try { await navigator.clipboard.writeText(input.value); } catch(_){} });
+      shareBtn?.addEventListener('click', async ()=>{ const data = { title:'簡易電卓', text: input.value, url: input.value }; if (navigator.share){ try{ await navigator.share(data); return; }catch(_){} } try{ await navigator.clipboard.writeText(input.value); }catch(_){} });
+      function presetUrl(kind){ const base=(p)=> new URL(p, location.href).href; if (kind==='app') return base('./'); if (kind==='memo') return base('./memo.html'); if (kind==='timer') return base('./timer.html'); if (kind==='convert') return base('./convert.html'); if (kind==='password') return base('./password.html'); if (kind==='voice') return base('./voice.html'); if (kind==='ocr') return base('./ocr.html'); if (kind==='here') return location.href; return base('./'); }
+      function applyPreset(){ if (!input || !presetSel) return; input.value = presetUrl(presetSel.value); update(); }
+      applyPresetBtn?.addEventListener('click', applyPreset);
 
       // ===== QR Scanner (from qr.html, simplified for camera page) =====
       const scanStart = document.getElementById('scanStart');
