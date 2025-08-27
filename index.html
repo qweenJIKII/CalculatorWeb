@@ -120,6 +120,7 @@
       .display { padding: 16px 14px 8px 14px; }
       .result { font-size: clamp(24px, 6.0vh, 54px); }
       .keys { gap: 8px; padding: 12px; padding-bottom: calc(env(safe-area-inset-bottom) + 96px); overflow-y: auto; scroll-padding-bottom: 96px; }
+      .toolbar { padding: 8px 12px; gap: 6px; }
       button.key { padding: clamp(6px, 1.9vh, 10px) 0; font-size: clamp(14px, 2.1vh, 17px); }
     }
 
@@ -130,6 +131,21 @@
       .toolbar { gap: 8px; }
       button.key { padding: clamp(6px, 1.8vh, 10px) 0; font-size: clamp(14px, 2vh, 17px); }
     }
+
+    /* History modal */
+    .modal { position: fixed; inset: 0; display: none; z-index: 1000; }
+    .modal[aria-hidden="false"] { display: block; }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); }
+    .modal-panel {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: min(480px, 92vw); max-height: 80vh;
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+      display: grid; grid-template-rows: auto 1fr; overflow: hidden;
+    }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .modal-title { font-weight: 600; }
+    .modal-body { padding: 12px; overflow: auto; }
   </style>
 </head>
 <body>
@@ -217,17 +233,27 @@
 
       <!-- bottom row -->
       <button class="key util" data-act="recip" data-group="sci" aria-label="逆数">1/x</button>
-      <button class="key key-enter equals wide-3" data-act="equals" aria-label="計算">＝</button>
+      <button class="key util" data-act="show-history" aria-label="履歴を開く">履歴</button>
+      <button class="key key-enter equals wide-2" data-act="equals" aria-label="計算">＝</button>
     </section>
+
+    <!-- History Modal -->
+    <div id="historyModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+      <div class="modal-backdrop" data-act="close-history"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <div id="historyTitle" class="modal-title">履歴（最新10件）</div>
+          <button id="historyClose" class="key util" data-act="close-history" aria-label="閉じる">×</button>
+        </div>
+        <div class="modal-body">
+          <ul id="history" style="list-style:none; padding-left:0; margin:0; display:grid; gap:6px;"></ul>
+        </div>
+      </div>
+    </div>
 
     <div class="footer">
       <span><kbd>0-9</kbd> <kbd>+ − × ÷</kbd> <kbd>.</kbd> <kbd>Enter</kbd> <kbd>Backspace</kbd> <kbd>Esc</kbd> / メモリ: MC MR M+ M-</span>
-      <div style="margin-top:8px">
-        <details>
-          <summary>履歴（最新10件）</summary>
-          <ul id="history" style="list-style:none; padding-left:0; margin:8px 0 0; display:grid; gap:6px;"></ul>
-        </details>
-      </div>
+      <div style="margin-top:8px; opacity:.8">履歴は下部の「履歴」ボタンから開けます。</div>
     </div>
   </main>
 
@@ -236,6 +262,7 @@
       const exprEl = document.getElementById('expr');
       const resultEl = document.getElementById('result');
       const historyEl = document.getElementById('history');
+      const historyModal = document.getElementById('historyModal');
       let expr = '';
       let memory = 0;
       const history = [];
@@ -374,6 +401,9 @@
         }).join('');
       }
 
+      function openHistory(){ historyModal?.setAttribute('aria-hidden','false'); }
+      function closeHistory(){ historyModal?.setAttribute('aria-hidden','true'); }
+
       function memoryClear(){ memory = 0; }
       function memoryRecall(){ insert(String(memory)); }
       function memoryPlus(){ const v = Number(resultEl.textContent) || 0; memory += v; saveState(); }
@@ -446,7 +476,12 @@
       // Click handlers
       document.addEventListener('click', (ev) => {
         const btn = ev.target.closest('button.key');
-        if (!btn) return;
+        if (!btn) {
+          // backdrop click support
+          const closeOnBackdrop = ev.target?.getAttribute && ev.target.getAttribute('data-act') === 'close-history';
+          if (closeOnBackdrop) { closeHistory(); }
+          return;
+        }
         const act = btn.getAttribute('data-act');
         const val = btn.getAttribute('data-val');
         if (act) {
@@ -470,10 +505,12 @@
           if (act === 'toggle-sci') return toggleSci();
           if (act === 'const-pi') return insertPI();
           if (act === 'const-e') return insertE();
+          if (act === 'show-history') return openHistory();
+          if (act === 'close-history') return closeHistory();
           if (act === 'use-history') {
             const idx = Number(btn.getAttribute('data-idx'));
             const item = history[idx];
-            if (item) { expr = item.res; update(); setResultText(item.res); }
+            if (item) { expr = item.res; update(); setResultText(item.res); closeHistory(); }
             return;
           }
         }
@@ -486,6 +523,9 @@
 
       // Keyboard support
       window.addEventListener('keydown', (e) => {
+        if (historyModal && historyModal.getAttribute('aria-hidden') === 'false') {
+          if (e.key === 'Escape') { e.preventDefault(); closeHistory(); return; }
+        }
         if (e.key === 'Enter') { e.preventDefault(); equals(); return; }
         if (e.key === 'Backspace') { back(); return; }
         if (e.key === 'Escape') { clearAll(); return; }
