@@ -216,7 +216,7 @@
         const buttons = openModal.querySelectorAll('button[data-open]');
         buttons.forEach(b => b.classList.toggle('selected', b.getAttribute('data-open')===which));
       }
-      function showOpenModal(url){ if (!url) return; modalUrl.textContent = url; chosenBrowser = openWithSel.value || chosenBrowser || 'system'; updateModalSelection(chosenBrowser); openModal.setAttribute('aria-hidden','false'); openModal.style.display='grid'; }
+      function showOpenModal(url){ if (!url) return; modalUrl.textContent = url; chosenBrowser = openWithSel.value || chosenBrowser || 'system'; openWithSel.value = chosenBrowser; updateModalSelection(chosenBrowser); openModal.setAttribute('aria-hidden','false'); openModal.style.display='grid'; }
       function hideOpenModal(){ openModal.setAttribute('aria-hidden','true'); openModal.style.display='none'; }
       function handleDetected(text){ if (!text) return; setScanOut(text); try{ navigator.vibrate?.(40); }catch(_){ } stopScan(); showOpenModal(text); }
 
@@ -308,6 +308,7 @@
       scanCopy.addEventListener('click', async ()=>{ try{ await navigator.clipboard?.writeText(scanOut.textContent||''); }catch(_){} });
       scanOpen.addEventListener('click', (e)=>{ e.preventDefault(); const url = scanOut.textContent||''; if (!url || url==='-') return; showOpenModal(url); });
       openWithSel.addEventListener('change', ()=>{ chosenBrowser = openWithSel.value || 'system'; updateModalSelection(chosenBrowser); });
+      updateModalSelection(openWithSel.value || chosenBrowser || 'system');
 
       openModal.addEventListener('click', (e)=>{ if (e.target === openModal) hideOpenModal(); });
       document.getElementById('modalClose').addEventListener('click', hideOpenModal);
