@@ -49,6 +49,7 @@
     .modal-url{ font-size:12px; color:var(--muted); word-break:break-all; background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); padding:8px; border-radius:8px; }
     .modal-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
     .btn{ padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:600; cursor:pointer; }
+    .btn.selected{ border-color: rgba(110,168,255,0.8); box-shadow: 0 0 0 2px rgba(110,168,255,0.25) inset; }
   </style>
 </head>
 <body>
@@ -144,6 +145,7 @@
             <button class="btn" data-open="chrome">Chrome</button>
             <button class="btn" data-open="firefox">Firefox</button>
             <button class="btn" data-open="edge">Edge</button>
+            <button class="btn" id="modalOpenNow">開く</button>
             <button class="btn" id="modalCopy">コピー</button>
             <button class="btn" id="modalClose">キャンセル</button>
           </div>
@@ -177,6 +179,7 @@
       const openWithSel = document.getElementById('scanOpenWith');
       let mediaStream = null; let rafId = 0; let running = false; let detector = null;
       let videoTrack = null; let caps = null; let settings = null; let torchOn = false;
+      let chosenBrowser = 'system'; let noDetectFrames = 0;
 
       function buildQrUrl(u){
         return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(u);
@@ -231,7 +234,18 @@
       const openModal = document.getElementById('openModal');
       const modalUrl = document.getElementById('modalUrl');
       const modalCopy = () => { try{ navigator.clipboard?.writeText(modalUrl.textContent||''); }catch(_){} };
-      function showOpenModal(url){ if (!url) return; modalUrl.textContent = url; openModal.setAttribute('aria-hidden','false'); openModal.style.display='grid'; }
+      function updateModalSelection(which){
+        const buttons = openModal.querySelectorAll('button[data-open]');
+        buttons.forEach(b => b.classList.toggle('selected', b.getAttribute('data-open')===which));
+      }
+      function showOpenModal(url){
+        if (!url) return;
+        modalUrl.textContent = url;
+        chosenBrowser = openWithSel.value || chosenBrowser || 'system';
+        updateModalSelection(chosenBrowser);
+        openModal.setAttribute('aria-hidden','false');
+        openModal.style.display='grid';
+      }
       function hideOpenModal(){ openModal.setAttribute('aria-hidden','true'); openModal.style.display='none'; }
 
       function setScanOut(text){ scanOut.textContent = text || '-'; scanOpen.href = text || '#'; }
@@ -248,16 +262,24 @@
       async function startScan(){
         if (running) return; running = true; setScanOut('-');
         hideOpenModal();
-        try{
-          mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: 'environment',
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            },
-            audio: false
-          });
-        }catch(err){ running=false; alert('カメラにアクセスできません'); return; }
+        // Try higher resolutions first with graceful fallback to maximize decode performance
+        try{ mediaStream = null; }catch(_){ /* no-op */ }
+        let lastErr = null;
+        const baseVideo = { facingMode: 'environment' };
+        const candidates = [
+          { width: { ideal: 2560 }, height: { ideal: 1440 }, frameRate: { ideal: 60 }, aspectRatio: { ideal: 16/9 } },
+          { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 }, aspectRatio: { ideal: 16/9 } },
+          { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 }, aspectRatio: { ideal: 16/9 } },
+          { width: { ideal: 1280 }, height: { ideal: 720 } },
+          {}
+        ];
+        for (const v of candidates){
+          try{
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: { ...baseVideo, ...v }, audio: false });
+            if (mediaStream) break;
+          }catch(e){ lastErr = e; }
+        }
+        if (!mediaStream){ running=false; alert('カメラにアクセスできません'); return; }
         video.srcObject = mediaStream; await video.play().catch(()=>{});
 
         // Track capabilities (zoom/torch)
@@ -294,6 +316,23 @@
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true });
         // Initial zoom by distance mode
         await applyDistanceZoom();
+        noDetectFrames = 0;
+
+        function enhanceImageData(imageData){
+          const d = imageData.data; const len = d.length;
+          // simple contrast/brightness boost
+          const contrast = 1.25; // 25% up
+          const brightness = 10;  // +10
+          for (let i=0; i<len; i+=4){
+            let r = d[i], g = d[i+1], b = d[i+2];
+            // convert to grayscale to reduce noise a bit (weighted)
+            let y = (r*0.299 + g*0.587 + b*0.114);
+            y = (y - 128) * contrast + 128 + brightness;
+            y = y < 0 ? 0 : (y > 255 ? 255 : y);
+            d[i] = d[i+1] = d[i+2] = y;
+          }
+          return imageData;
+        }
 
         // Frame scanner
         const scanOnce = async () => {
@@ -309,7 +348,7 @@
             }catch(_){ /* fallthrough */ }
           }
 
-          // 2) jsQR multi-pass: full frame then center crop, always attemptBoth
+          // 2) jsQR multi-pass: full -> center(80%) -> center(60%), plus enhanced contrast pass
           if (window.jsQR){
             // full frame
             canvas.width = w; canvas.height = h; ctx.drawImage(video, 0, 0, w, h);
@@ -323,6 +362,27 @@
             const crop = ctx.getImageData(sx, sy, cw, ch);
             res = window.jsQR(crop.data, cw, ch, { inversionAttempts: 'attemptBoth' });
             if (res && res.data){ handleDetected(res.data); return; }
+
+            // center crop (60%)
+            const cw2 = Math.floor(w * 0.6), ch2 = Math.floor(h * 0.6);
+            const sx2 = Math.floor((w - cw2) / 2), sy2 = Math.floor((h - ch2) / 2);
+            const crop2 = ctx.getImageData(sx2, sy2, cw2, ch2);
+            res = window.jsQR(crop2.data, cw2, ch2, { inversionAttempts: 'attemptBoth' });
+            if (res && res.data){ handleDetected(res.data); return; }
+
+            // enhanced contrast on full frame
+            const img2 = enhanceImageData(ctx.getImageData(0, 0, w, h));
+            res = window.jsQR(img2.data, w, h, { inversionAttempts: 'attemptBoth' });
+            if (res && res.data){ handleDetected(res.data); return; }
+          }
+
+          // Escalation: every 20 frames without detection, gently zoom in if possible
+          noDetectFrames++;
+          if ((noDetectFrames % 20 === 0) && caps?.zoom){
+            const cur = parseFloat(zoomRange.value||'1');
+            const step = (caps.zoom.step ?? 0.1) || 0.1;
+            const next = Math.min((caps.zoom.max ?? cur), cur + step);
+            if (next > cur){ zoomRange.value = String(next); await setZoom(next); }
           }
         };
 
@@ -371,18 +431,25 @@
       scanStop.addEventListener('click', stopScan);
       scanCopy.addEventListener('click', async ()=>{ try{ await navigator.clipboard?.writeText(scanOut.textContent||''); }catch(_){} });
       scanOpen.addEventListener('click', (e)=>{ e.preventDefault(); const url = scanOut.textContent||''; if (!url || url==='-') return; showOpenModal(url); });
+      openWithSel.addEventListener('change', ()=>{ chosenBrowser = openWithSel.value || 'system'; updateModalSelection(chosenBrowser); });
 
       // Modal events
       openModal.addEventListener('click', (e)=>{ if (e.target === openModal) hideOpenModal(); });
       document.getElementById('modalClose').addEventListener('click', hideOpenModal);
       document.getElementById('modalCopy').addEventListener('click', modalCopy);
+      // 選択ボタン: ブラウザ選択のみ（即時起動しない）
       openModal.addEventListener('click', (e)=>{
         const btn = e.target.closest('button[data-open]');
         if (!btn) return;
-        const which = btn.getAttribute('data-open');
+        chosenBrowser = btn.getAttribute('data-open') || 'system';
+        openWithSel.value = chosenBrowser;
+        updateModalSelection(chosenBrowser);
+      });
+      // 決定して開く
+      document.getElementById('modalOpenNow').addEventListener('click', ()=>{
         const url = modalUrl.textContent||'';
         hideOpenModal();
-        openWith(url, which);
+        openWith(url, chosenBrowser);
       });
       // ESC to close modal
       window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && openModal.getAttribute('aria-hidden')==='false') hideOpenModal(); });
