@@ -115,11 +115,11 @@
     /* Mobile full-screen adjustments */
     @media (max-width: 720px) {
       body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-      .app { width: 100vw; min-height: 100dvh; border-radius: 0; overflow-y: auto; }
+      .app { width: 100vw; min-height: 100svh; border-radius: 0; overflow-y: auto; }
       .header { padding: 12px 14px; }
       .display { padding: 16px 14px 8px 14px; }
       .result { font-size: clamp(24px, 6.0vh, 54px); }
-      .keys { gap: 8px; padding: 12px; }
+      .keys { gap: 8px; padding: 12px; padding-bottom: calc(env(safe-area-inset-bottom) + 44px); }
       button.key { padding: clamp(8px, 2.2vh, 12px) 0; font-size: clamp(15px, 2.2vh, 18px); }
     }
 
