@@ -1,10 +1,10 @@
 /*
   Simple Service Worker for Calculator PWA
-  - Precaches core assets
+  - Precaches core assets (incl. camera.html)
   - Network-first for navigation, fallback to cache, then offline page
   - Stale-while-revalidate for static assets
 */
-const VERSION = 'v1.4.8';
+const VERSION = 'v1.5.0';
 const CACHE_NAME = `calc-cache-${VERSION}`;
 const CORE_ASSETS = [
   './',

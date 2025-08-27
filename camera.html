@@ -195,9 +195,40 @@
               <option value="jpn+eng">日本語+英語</option>
             </select>
           </label>
+          <label class="hint">レイアウト
+            <select id="psm" class="control">
+              <option value="6" selected>単一ブロック</option>
+              <option value="4">単一列</option>
+              <option value="3">自動段落</option>
+              <option value="5">縦書きブロック</option>
+              <option value="7">単一行</option>
+            </select>
+          </label>
+          <label class="hint">スケール
+            <select id="scale" class="control">
+              <option value="auto" selected>自動</option>
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="3">3x</option>
+            </select>
+          </label>
+          <label class="hint">しきい値
+            <select id="thresh" class="control">
+              <option value="none" selected>なし</option>
+              <option value="bradley">Bradley(適応)</option>
+            </select>
+          </label>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            <input id="preproc" type="checkbox" class="control" style="width:auto;"> 前処理(強調)
+          </label>
           <button id="run" class="btn">認識</button>
           <button id="copy" class="btn">コピー</button>
           <button id="share" class="btn">共有</button>
+          <button id="presetProduct" class="btn" title="商品パッケージ向け推奨設定">商品モード</button>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            <input id="perspEnable" type="checkbox" class="control" style="width:auto;"> 台形補正(手動)
+          </label>
+          <button id="perspEdit" class="btn" title="四隅をドラッグして補正">四隅編集</button>
         </div>
         <div id="status" class="hint">準備中…（CDNからライブラリ読み込み）</div>
         <div class="preview"><img id="preview" alt="プレビュー" /></div>
@@ -205,6 +236,18 @@
       </section>
     </section>
   </main>
+
+  <!-- Perspective Editor Modal -->
+  <div id="perspModal" aria-hidden="true" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:#fff; padding:12px; border-radius:8px; max-width:90vw; max-height:90vh; display:flex; flex-direction:column; gap:8px;">
+      <div style="font-weight:600;">四隅編集（ドラッグして調整）</div>
+      <canvas id="perspCanvas" style="max-width:80vw; max-height:70vh; border:1px solid #ccc; touch-action:none;"></canvas>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button id="perspApply" class="btn">適用</button>
+        <button id="perspCancel" class="btn">キャンセル</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
@@ -412,13 +455,213 @@
       const ocrCamShot = document.getElementById('ocrCamShot');
       const ocrCamShotRun = document.getElementById('ocrCamShotRun');
       let ocrStream = null, ocrTrack = null, ocrWorker = null;
+      const psmSel = document.getElementById('psm');
+      const preprocChk = document.getElementById('preproc');
+      const scaleSel = document.getElementById('scale');
+      const threshSel = document.getElementById('thresh');
+      let lastLang = null, lastPsm = null;
       let image = null;
+      // Product preset & perspective editor elements
+      const presetProduct = document.getElementById('presetProduct');
+      const perspEnable = document.getElementById('perspEnable');
+      const perspEdit = document.getElementById('perspEdit');
+      const perspModal = document.getElementById('perspModal');
+      const perspCanvas = document.getElementById('perspCanvas');
+      const perspApply = document.getElementById('perspApply');
+      const perspCancel = document.getElementById('perspCancel');
+      // quadrilateral in normalized coords (0..1) relative to original image size
+      let perspQuadNorm = null;
       if (ocr.file){ ocr.file.onchange = ()=>{ const f = ocr.file.files?.[0]; if (!f) return; image = f; const url = URL.createObjectURL(f); ocr.prev.src = url; }; }
       function stopOcrCam(){ if (ocrStream){ for (const t of ocrStream.getTracks?.()||[]){ try{ t.stop(); }catch(_){} } ocrStream=null; } if (ocrVideo){ try{ ocrVideo.pause(); }catch(_){} ocrVideo.srcObject=null; } ocrTrack=null; }
       async function startOcrCam(){ if (ocrStream) return; try{ const baseVideo={ facingMode:'environment' }; const candidates=[ { width:{ideal:2560}, height:{ideal:1440}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} }, { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} }, { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} }, { width:{ideal:1280}, height:{ideal:720} }, {} ]; let stream=null; for (const v of candidates){ try{ stream = await navigator.mediaDevices.getUserMedia({ video:{...baseVideo, ...v}, audio:false }); if (stream) break; }catch(_){ } } if (!stream){ alert('カメラにアクセスできません'); return; } ocrStream = stream; ocrVideo.srcObject = ocrStream; await ocrVideo.play().catch(()=>{}); ocrTrack = ocrStream.getVideoTracks?.()[0]||null; }catch(_){ alert('カメラ開始に失敗しました'); } }
-      async function captureOcrFrame(){ if (!ocrVideo || !(ocrVideo.readyState>=2)) { alert('カメラが準備できていません'); return null; } const w=ocrVideo.videoWidth|0, h=ocrVideo.videoHeight|0; if(!w||!h){ alert('フレームを取得できません'); return null; } const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h; const ctx=canvas.getContext('2d',{ willReadFrequently:true }); ctx.drawImage(ocrVideo,0,0,w,h); const blob = await new Promise(res=> canvas.toBlob(res,'image/png',1)); if (blob){ const url = URL.createObjectURL(blob); ocr.prev.src = url; image = blob; } return blob; }
+      async function captureOcrFrame(){
+        // Prefer high-quality still capture when available
+        try{
+          if (ocrTrack && 'ImageCapture' in window){
+            try{
+              const ic = new ImageCapture(ocrTrack);
+              const blob = await ic.takePhoto();
+              if (blob){ const url = URL.createObjectURL(blob); ocr.prev.src = url; image = blob; return blob; }
+            }catch(_){ /* fallback */ }
+          }
+        }catch(_){ }
+        // Fallback: snapshot from video frame
+        if (!ocrVideo || !(ocrVideo.readyState>=2)) { alert('カメラが準備できていません'); return null; }
+        const w=ocrVideo.videoWidth|0, h=ocrVideo.videoHeight|0; if(!w||!h){ alert('フレームを取得できません'); return null; }
+        const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h; const ctx=canvas.getContext('2d',{ willReadFrequently:true });
+        ctx.drawImage(ocrVideo,0,0,w,h);
+        const blob = await new Promise(res=> canvas.toBlob(res,'image/png',1));
+        if (blob){ const url = URL.createObjectURL(blob); ocr.prev.src = url; image = blob; }
+        return blob;
+      }
+
+      // Lightweight preprocessing (grayscale + contrast stretch)
+      function enhanceCanvas(ctx, w, h){
+        const img = ctx.getImageData(0,0,w,h); const d = img.data;
+        let min=255, max=0;
+        for (let i=0;i<d.length;i+=4){ const y = (0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2])|0; if (y<min) min=y; if (y>max) max=y; d[i]=d[i+1]=d[i+2]=y; d[i+3]=255; }
+        const range = Math.max(1, max-min); const a = 255/range; const b = -min*a;
+        for (let i=0;i<d.length;i+=4){ let v = (d[i]*a + b)|0; if (v<0) v=0; else if (v>255) v=255; d[i]=d[i+1]=d[i+2]=v; }
+        ctx.putImageData(img,0,0);
+      }
+      // Simple 3x3 sharpen kernel
+      function sharpen3x3(ctx, w, h){
+        const src = ctx.getImageData(0,0,w,h); const s = src.data; const out = ctx.createImageData(w,h); const d = out.data;
+        const k = [0,-1,0,-1,5,-1,0,-1,0];
+        for (let y=1;y<h-1;y++){
+          for (let x=1;x<w-1;x++){
+            let r=0,g=0,b=0,idx=0;
+            for (let ky=-1; ky<=1; ky++){
+              for (let kx=-1; kx<=1; kx++){
+                const i = ((y+ky)*w + (x+kx))<<2; const kv = k[idx++];
+                r += s[i]*kv; g += s[i+1]*kv; b += s[i+2]*kv;
+              }
+            }
+            const o = (y*w + x)<<2; d[o] = Math.max(0,Math.min(255,r|0)); d[o+1]=Math.max(0,Math.min(255,g|0)); d[o+2]=Math.max(0,Math.min(255,b|0)); d[o+3]=255;
+          }
+        }
+        ctx.putImageData(out,0,0);
+      }
+      // Bradley adaptive threshold using integral image
+      function adaptiveBradley(ctx, w, h, t=0.15, winRatio=0.1){
+        const img = ctx.getImageData(0,0,w,h); const d = img.data;
+        const gray = new Uint8ClampedArray(w*h);
+        for (let i=0, p=0;i<d.length;i+=4, p++){ gray[p]=d[i]; }
+        const integ = new Uint32Array((w+1)*(h+1));
+        for (let y=1;y<=h;y++){
+          let rowsum=0; for (let x=1;x<=w;x++){
+            const v = gray[(y-1)*w + (x-1)]; rowsum += v; const idx = y*(w+1)+x; integ[idx] = integ[(y-1)*(w+1)+x] + rowsum; }
+        }
+        const s = Math.floor(Math.min(w,h) * winRatio); const r = Math.max(3, s|0); const w2=w+1;
+        const out = new Uint8ClampedArray(w*h);
+        for (let y=0;y<h;y++){
+          const y0 = Math.max(0, y-r), y1 = Math.min(h-1, y+r); const yy0=y0+1, yy1=y1+1;
+          for (let x=0;x<w;x++){
+            const x0 = Math.max(0, x-r), x1 = Math.min(w-1, x+r); const xx0=x0+1, xx1=x1+1;
+            const count = (x1-x0+1)*(y1-y0+1);
+            const sum = integ[yy1*w2+xx1] - integ[yy1*w2+xx0-1] - integ[(yy0-1)*w2+xx1] + integ[(yy0-1)*w2+xx0-1];
+            const v = gray[y*w+x];
+            out[y*w+x] = (v*count <= sum*(1-t)) ? 0 : 255;
+          }
+        }
+        // write back to image as binary
+        for (let i=0, p=0;i<d.length;i+=4, p++){ const v=out[p]; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
+        ctx.putImageData(img,0,0);
+      }
+      // Compute homography matrix from 4 pts A->B (each as [{x,y}*4])
+      function computeHomography(src, dst){
+        // Solve for H: dst = H * src
+        const A = [];
+        for (let i=0;i<4;i++){
+          const xs=src[i].x, ys=src[i].y, xd=dst[i].x, yd=dst[i].y;
+          A.push([ xs, ys, 1, 0, 0, 0, -xs*xd, -ys*xd, xd ]);
+          A.push([ 0, 0, 0, xs, ys, 1, -xs*yd, -ys*yd, yd ]);
+        }
+        // Gaussian elimination
+        for (let i=0;i<8;i++){
+          // pivot
+          let maxR=i; for (let r=i+1;r<8;r++){ if (Math.abs(A[r][i])>Math.abs(A[maxR][i])) maxR=r; }
+          const tmp=A[i]; A[i]=A[maxR]; A[maxR]=tmp;
+          const pivot=A[i][i]||1e-12;
+          for (let j=i;j<9;j++) A[i][j]/=pivot;
+          for (let r=0;r<8;r++) if (r!==i){ const f=A[r][i]; for (let j=i;j<9;j++) A[r][j]-=f*A[i][j]; }
+        }
+        const h=[A[0][8],A[1][8],A[2][8],A[3][8],A[4][8],A[5][8],A[6][8],A[7][8],1];
+        return h;
+      }
+      function invert3x3(m){
+        const a=m[0],b=m[1],c=m[2],d=m[3],e=m[4],f=m[5],g=m[6],h=m[7],i=m[8];
+        const A=e*i-f*h, B=-(d*i-f*g), C=d*h-e*g, D=-(b*i-c*h), E=a*i-c*g, F=-(a*h-b*g), G=b*f-c*e, H=-(a*f-b*d), I=a*e-b*d;
+        const det=a*A + b*B + c*C; const invDet = det? 1/det : 0;
+        return [A*invDet, D*invDet, G*invDet, B*invDet, E*invDet, H*invDet, C*invDet, F*invDet, I*invDet];
+      }
+      function warpPerspective(srcCanvas, srcW, srcH, quad){
+        // quad: [{x,y}*4] in srcCanvas pixel coordinates, order TL, TR, BR, BL
+        function dist(p,q){ const dx=p.x-q.x, dy=p.y-q.y; return Math.hypot(dx,dy); }
+        const wOut = Math.max(1, Math.round(Math.max(dist(quad[0],quad[1]), dist(quad[3],quad[2]))));
+        const hOut = Math.max(1, Math.round(Math.max(dist(quad[0],quad[3]), dist(quad[1],quad[2]))));
+        const out = document.createElement('canvas'); out.width=wOut; out.height=hOut; const octx=out.getContext('2d',{ willReadFrequently:true });
+        // Build H for mapping dest->src (so we can sample src)
+        const dstRect=[{x:0,y:0},{x:wOut-1,y:0},{x:wOut-1,y:hOut-1},{x:0,y:hOut-1}];
+        const H = computeHomography(dstRect, quad); // maps (x_d,y_d) -> (x_s,y_s)
+        // Iterate pixels
+        const srcCtx = srcCanvas.getContext('2d', { willReadFrequently:true });
+        const sData = srcCtx.getImageData(0,0,srcW,srcH); const s = sData.data;
+        const dData = octx.createImageData(wOut,hOut); const d = dData.data;
+        for (let y=0;y<hOut;y++){
+          for (let x=0;x<wOut;x++){
+            const X = H[0]*x + H[1]*y + H[2];
+            const Y = H[3]*x + H[4]*y + H[5];
+            const Z = H[6]*x + H[7]*y + 1;
+            const ux = X/Z, vy = Y/Z;
+            const xi = ux|0, yi = vy|0;
+            const doff = (y*wOut + x)<<2;
+            if (xi>=0 && yi>=0 && xi<srcW && yi<srcH){
+              const soff = (yi*srcW + xi)<<2;
+              d[doff]=s[soff]; d[doff+1]=s[soff+1]; d[doff+2]=s[soff+2]; d[doff+3]=255;
+            }else{ d[doff]=d[doff+1]=d[doff+2]=255; d[doff+3]=255; }
+          }
+        }
+        octx.putImageData(dData,0,0);
+        return out;
+      }
+      async function preprocessBlobIfNeeded(src){
+        // decide if we need preprocessing/scaling
+        const needPre = preprocChk?.checked;
+        const scaleMode = scaleSel?.value || 'auto';
+        const doScaleAnyway = scaleMode !== '1';
+        if (!needPre && !doScaleAnyway) return src;
+        try{
+          // Prepare base bitmap
+          let bmp = null; let w=0, h=0;
+          if (src instanceof HTMLCanvasElement){ w=src.width; h=src.height; bmp = await createImageBitmap(src); }
+          else { bmp = await createImageBitmap(src); w=bmp.width; h=bmp.height; }
+          // Determine scale factor
+          let factor = 1;
+          if (scaleMode === 'auto'){
+            if (w < 700) factor = 3; else if (w < 1100) factor = 2; else factor = 1;
+          } else { factor = Math.max(1, parseFloat(scaleMode)||1); }
+          const tw = Math.round(w*factor), th = Math.round(h*factor);
+          let canvas = document.createElement('canvas'); canvas.width=tw; canvas.height=th;
+          let ctx = canvas.getContext('2d',{ willReadFrequently:true });
+          ctx.imageSmoothingEnabled = false; // preserve edges for small text
+          ctx.drawImage(bmp, 0,0, w,h, 0,0, tw,th);
+          // Perspective warp if enabled and points exist
+          if (perspEnable?.checked && perspQuadNorm){
+            const quad = [0,1,2,3].map(i=>({ x: perspQuadNorm[i].x * tw, y: perspQuadNorm[i].y * th }));
+            try{
+              const warped = warpPerspective(canvas, tw, th, quad);
+              canvas = warped; ctx = canvas.getContext('2d',{ willReadFrequently:true });
+            }catch(_){ /* ignore warp errors */ }
+          }
+          if (needPre){
+            enhanceCanvas(ctx, canvas.width, canvas.height);
+            // Mild sharpen before threshold
+            try{ sharpen3x3(ctx, canvas.width, canvas.height); }catch(_){ }
+            const mode = threshSel?.value || 'none';
+            if (mode === 'bradley'){
+              try{ adaptiveBradley(ctx, canvas.width, canvas.height, 0.15, 0.08); }catch(_){ }
+            }
+          }
+          return canvas;
+        }catch(_){ return src; }
+      }
       async function ensureOcrWorker(){ if (!ocrWorker){ setStatus('初期化中...'); ocrWorker = await Tesseract.createWorker({ logger: m => { if (m.status && m.progress!=null){ setStatus(`${m.status} ${(m.progress*100).toFixed(0)}%`); } } }); } }
-      async function recognizeFrom(src){ try{ if (!src){ alert('画像が未選択です'); return; } await ensureOcrWorker(); const lang = ocr.lang?.value || 'jpn'; setStatus('言語読み込み...'); await ocrWorker.loadLanguage(lang); await ocrWorker.initialize(lang); await ocrWorker.setParameters({ tessedit_pageseg_mode:'6', preserve_interword_spaces:'1', user_defined_dpi:'300', tessedit_ocr_engine_mode:'1' }); setStatus('認識中...'); const { data } = await ocrWorker.recognize(src); ocr.out.value = data?.text || ''; setStatus('完了'); }catch(err){ setStatus('エラー'); console.error(err); } }
+      async function recognizeFrom(src){
+        try{
+          if (!src){ alert('画像が未選択です'); return; }
+          await ensureOcrWorker();
+          const lang = ocr.lang?.value || 'jpn';
+          if (lastLang !== lang){ setStatus('言語読み込み...'); await ocrWorker.loadLanguage(lang); await ocrWorker.initialize(lang); lastLang = lang; lastPsm = null; }
+          const psm = psmSel?.value || '6';
+          if (lastPsm !== psm){ await ocrWorker.setParameters({ tessedit_pageseg_mode: psm, preserve_interword_spaces:'1', user_defined_dpi:'300', tessedit_ocr_engine_mode:'1' }); lastPsm = psm; }
+          const prepared = await preprocessBlobIfNeeded(src);
+          setStatus('認識中...');
+          const { data } = await ocrWorker.recognize(prepared);
+          ocr.out.value = data?.text || '';
+          setStatus('完了');
+        }catch(err){ setStatus('エラー'); console.error(err); }
+      }
       ocrCamStart?.addEventListener('click', startOcrCam);
       ocrCamStop?.addEventListener('click', stopOcrCam);
       ocrCamShot?.addEventListener('click', async ()=>{ await captureOcrFrame(); });
@@ -428,6 +671,66 @@
       if (ocr.copy){ ocr.copy.onclick = async ()=>{ try{ await navigator.clipboard?.writeText(ocr.out.value); }catch(_){} }; }
       if (ocr.share){ ocr.share.onclick = async ()=>{ const text = ocr.out.value; if (navigator.share){ try{ await navigator.share({ title:'OCR結果', text }); return; }catch(_){} } try{ await navigator.clipboard?.writeText(text); }catch(_){} }; }
       setStatus('準備OK');
+
+      // ===== Product preset and Perspective Editor =====
+      presetProduct?.addEventListener('click', ()=>{
+        // Set recommended options for product packages
+        const opt = Array.from(ocr.lang?.options||[]).map(o=>o.value);
+        if (opt.includes('jpn+eng')) ocr.lang.value='jpn+eng'; else if (opt.includes('jpn')) ocr.lang.value='jpn';
+        if (psmSel) psmSel.value='3';
+        if (scaleSel) scaleSel.value='auto';
+        if (threshSel) threshSel.value='bradley';
+        if (preprocChk) preprocChk.checked=true;
+        if (perspEnable) perspEnable.checked=true;
+      });
+
+      function openPerspModal(){ perspModal.style.display='flex'; perspModal.setAttribute('aria-hidden','false'); }
+      function closePerspModal(){ perspModal.style.display='none'; perspModal.setAttribute('aria-hidden','true'); }
+
+      perspEdit?.addEventListener('click', async ()=>{
+        try{
+          if (!image){ alert('まず画像を選択/撮影してください'); return; }
+          const bmp = await createImageBitmap(image);
+          // scale down for editor canvas
+          const maxW = Math.min(window.innerWidth*0.8, 1200);
+          const maxH = Math.min(window.innerHeight*0.7, 900);
+          const scale = Math.min(maxW / bmp.width, maxH / bmp.height, 1);
+          const cw = Math.max(1, Math.round(bmp.width * scale));
+          const ch = Math.max(1, Math.round(bmp.height * scale));
+          perspCanvas.width=cw; perspCanvas.height=ch;
+          const ectx = perspCanvas.getContext('2d');
+          ectx.clearRect(0,0,cw,ch); ectx.drawImage(bmp,0,0,cw,ch);
+          // display points
+          let pts;
+          if (perspQuadNorm){
+            pts = [0,1,2,3].map(i=>({ x: perspQuadNorm[i].x * cw, y: perspQuadNorm[i].y * ch }));
+          }else{
+            pts = [ {x:8,y:8}, {x:cw-8,y:8}, {x:cw-8,y:ch-8}, {x:8,y:ch-8} ];
+          }
+          const R=10; let dragIdx=-1;
+          function draw(){
+            ectx.drawImage(bmp,0,0,cw,ch);
+            ectx.lineWidth=2; ectx.strokeStyle='#00aaff'; ectx.fillStyle='rgba(0,170,255,0.2)';
+            ectx.beginPath(); ectx.moveTo(pts[0].x,pts[0].y); for (let i=1;i<4;i++) ectx.lineTo(pts[i].x,pts[i].y); ectx.closePath(); ectx.fill(); ectx.stroke();
+            ectx.fillStyle='#ff3366'; for (const p of pts){ ectx.beginPath(); ectx.arc(p.x,p.y,R,0,Math.PI*2); ectx.fill(); }
+          }
+          function hit(x,y){ for (let i=0;i<4;i++){ const dx=x-pts[i].x, dy=y-pts[i].y; if (dx*dx+dy*dy<=R*R) return i; } return -1; }
+          function clamp(p){ p.x=Math.max(0,Math.min(cw-1,p.x)); p.y=Math.max(0,Math.min(ch-1,p.y)); }
+          draw();
+          function toXY(ev){ const rect=perspCanvas.getBoundingClientRect(); const x=(ev.clientX-rect.left)*(cw/rect.width); const y=(ev.clientY-rect.top)*(ch/rect.height); return {x,y}; }
+          function down(ev){ ev.preventDefault(); const {x,y}=toXY(ev.touches? ev.touches[0] : ev); dragIdx = hit(x,y); }
+          function move(ev){ if (dragIdx<0) return; ev.preventDefault(); const {x,y}=toXY(ev.touches? ev.touches[0] : ev); pts[dragIdx].x=x; pts[dragIdx].y=y; clamp(pts[dragIdx]); draw(); }
+          function up(){ dragIdx=-1; }
+          perspCanvas.addEventListener('mousedown', down); window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+          perspCanvas.addEventListener('touchstart', down, {passive:false}); window.addEventListener('touchmove', move, {passive:false}); window.addEventListener('touchend', up);
+          perspApply.onclick = ()=>{
+            perspQuadNorm = [0,1,2,3].map(i=>({ x: Math.max(0,Math.min(1, pts[i].x / cw)), y: Math.max(0,Math.min(1, pts[i].y / ch)) }));
+            closePerspModal();
+          };
+          perspCancel.onclick = ()=>{ closePerspModal(); };
+          openPerspModal();
+        }catch(err){ console.error(err); alert('四隅編集の準備に失敗しました'); }
+      });
 
       // Auto stop when tab becomes hidden to release camera
       document.addEventListener('visibilitychange', ()=>{ if (document.hidden){ try{ stopScan(); }catch(_){} try{ stopOcrCam(); }catch(_){} } });
