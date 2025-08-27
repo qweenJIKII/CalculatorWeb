@@ -167,6 +167,8 @@
               <button class="btn" data-open="edge">Edge</button>
               <button class="btn" id="modalOpenNow">開く</button>
               <button class="btn" id="modalCopy">コピー</button>
+              <button class="btn" id="modalMakeQR">QR作成</button>
+              <button class="btn" id="modalSaveQR">QR保存</button>
               <button class="btn" id="modalClose">キャンセル</button>
             </div>
           </div>
@@ -397,6 +399,9 @@
       document.getElementById('modalCopy').addEventListener('click', ()=>{ try{ navigator.clipboard?.writeText(modalUrl.textContent||''); }catch(_){} });
       openModal.addEventListener('click', (e)=>{ const btn = e.target.closest('button[data-open]'); if (!btn) return; chosenBrowser = btn.getAttribute('data-open') || 'system'; if (openWithSel){ openWithSel.value = chosenBrowser; } try{ localStorage.setItem('openWith', chosenBrowser); }catch(_){} updateModalSelection(chosenBrowser); });
       document.getElementById('modalOpenNow').addEventListener('click', ()=>{ const url = modalUrl.textContent||''; hideOpenModal(); openWith(url, chosenBrowser); });
+      // ポップアップからQR作成/保存
+      document.getElementById('modalMakeQR').addEventListener('click', ()=>{ const url = (modalUrl.textContent||'').trim(); if (!url) return; try{ if (input){ input.value = url; update(); } selectTab('qrgen'); location.hash = 'qrgen'; }catch(_){} hideOpenModal(); });
+      document.getElementById('modalSaveQR').addEventListener('click', ()=>{ const url = (modalUrl.textContent||'').trim(); if (!url) return; try{ const q = buildQrUrl(url); const a = document.createElement('a'); a.href = q; a.download = 'qr-from-scan.png'; document.body.appendChild(a); a.click(); a.remove(); }catch(_){} });
       window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && openModal.getAttribute('aria-hidden')==='false') hideOpenModal(); });
 
       // ===== OCR (from ocr.html) =====
