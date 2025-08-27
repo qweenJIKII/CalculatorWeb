@@ -53,10 +53,10 @@
   </style>
 </head>
 <body>
-  <main class="app" aria-label="タイマー" data-mode="pomodoro">
+  <main class="app" aria-label="タイマー" data-mode="kitchen">
     <div class="header">
       <div class="title">簡易電卓 - タイマー</div>
-      <div id="modeLabel" style="color:var(--muted); font-size:12px;">ポモドーロ</div>
+      <div id="modeLabel" style="color:var(--muted); font-size:12px;">キッチン</div>
     </div>
     <nav class="tabs" aria-label="ナビゲーション">
       <a class="tab" href="./">電卓</a>
@@ -72,10 +72,10 @@
 
     <section class="content">
       <div class="mode-tabs" role="tablist" aria-label="タイマーモード">
-        <button class="mode-tab" data-mode="pomodoro" role="tab" aria-selected="true">ポモドーロ</button>
-        <button class="mode-tab" data-mode="kitchen" role="tab" aria-selected="false">キッチン</button>
+        <button class="mode-tab" data-mode="pomodoro" role="tab" aria-selected="false">ポモドーロ</button>
+        <button class="mode-tab" data-mode="kitchen" role="tab" aria-selected="true">キッチン</button>
       </div>
-      <div id="display" class="display">25:00</div>
+      <div id="display" class="display">03:00</div>
       <div class="progress" aria-label="進捗"><div id="bar" class="bar"></div></div>
       <div id="pomodoroBox">
         <div class="presets">
@@ -110,6 +110,7 @@
         <div class="settings">
           <label>分 <input id="kMin" type="number" min="0" step="1"></label>
           <label>秒 <input id="kSec" type="number" min="0" max="59" step="1"></label>
+          <button id="kApply" title="入力値を表示へ反映">反映</button>
         </div>
       </div>
     </section>
@@ -146,12 +147,13 @@
         kMin: document.getElementById('kMin'),
         kSec: document.getElementById('kSec'),
         kPresets: document.getElementById('kPresets'),
+        kApply: document.getElementById('kApply'),
       };
       el.work.value = S.work; el.short.value = S.short; el.long.value = S.long; el.rounds.value = S.rounds;
       el.kMin.value = K.min; el.kSec.value = K.sec;
 
       let timer=null, endAt=0, phase='work', count=0, totalMs=0; // count=作業数
-      let mode = localStorage.getItem('timer_mode') || 'pomodoro';
+      let mode = localStorage.getItem('timer_mode') || 'kitchen';
 
       function saveSettings(){
         // 入力値を設定へ反映しつつ永続化
@@ -174,6 +176,7 @@
         localStorage.setItem('timer_k_sec', K.sec);
       }
       el.kMin.onchange = saveKitchen; el.kSec.onchange = saveKitchen;
+      el.kApply && (el.kApply.onclick = ()=>{ saveKitchen(); reset(); });
 
       function mmss(ms){ const t = Math.max(0, Math.floor(ms/1000)); const m=('0'+Math.floor(t/60)).slice(-2); const s=('0'+(t%60)).slice(-2); return m+':'+s; }
       function vibrate(){ try{ navigator.vibrate?.(200); }catch(_){} }
