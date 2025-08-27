@@ -28,6 +28,12 @@
     .controls{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
     .controls button{ padding:10px 16px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:700; cursor:pointer; }
 
+    .progress{ height:8px; border-radius:999px; background: rgba(255,255,255,.08); overflow:hidden; }
+    .progress .bar{ height:100%; width:0%; background: linear-gradient(90deg, #6ea8ff, #4ade80); transition: width .2s ease; }
+
+    .presets{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+    .presets button{ padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color:var(--text); cursor:pointer; font-size:12px; }
+
     .settings{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; }
     .settings input{ width:84px; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
     .cycle{ color:var(--muted); font-size:12px; text-align:center; }
@@ -58,6 +64,12 @@
 
     <section class="content">
       <div id="display" class="display">25:00</div>
+      <div class="progress" aria-label="進捗"><div id="bar" class="bar"></div></div>
+      <div class="presets">
+        <button data-preset="pomodoro" title="作業25/短休5/長休15 x4">ポモドーロ</button>
+        <button data-preset="short" title="作業10/短休2/長休5 x3">短め</button>
+        <button data-preset="long" title="作業45/短休10/長休20 x2">じっくり</button>
+      </div>
       <div class="controls">
         <button id="startBtn">開始</button>
         <button id="pauseBtn">一時停止</button>
@@ -95,36 +107,106 @@
         rounds: document.getElementById('rounds'),
         cycle: document.getElementById('cycle'),
         sessions: document.getElementById('sessions'),
+        bar: document.getElementById('bar'),
       };
       el.work.value = S.work; el.short.value = S.short; el.long.value = S.long; el.rounds.value = S.rounds;
 
-      let timer=null, endAt=0, phase='work', count=0; // count=作業数
+      let timer=null, endAt=0, phase='work', count=0, totalMs=0; // count=作業数
 
-      function saveSettings(){ localStorage.setItem('timer_work', el.work.value); localStorage.setItem('timer_short', el.short.value); localStorage.setItem('timer_long', el.long.value); localStorage.setItem('timer_rounds', el.rounds.value); }
+      function saveSettings(){
+        // 入力値を設定へ反映しつつ永続化
+        S.work = +el.work.value;
+        S.short = +el.short.value;
+        S.long = +el.long.value;
+        S.rounds = +el.rounds.value;
+        localStorage.setItem('timer_work', S.work);
+        localStorage.setItem('timer_short', S.short);
+        localStorage.setItem('timer_long', S.long);
+        localStorage.setItem('timer_rounds', S.rounds);
+      }
       el.work.onchange = saveSettings; el.short.onchange = saveSettings; el.long.onchange = saveSettings; el.rounds.onchange = saveSettings;
 
       function mmss(ms){ const t = Math.max(0, Math.floor(ms/1000)); const m=('0'+Math.floor(t/60)).slice(-2); const s=('0'+(t%60)).slice(-2); return m+':'+s; }
       function vibrate(){ try{ navigator.vibrate?.(200); }catch(_){} }
       function notify(text){ try{ if (Notification?.permission==='granted'){ new Notification(text); } else if (Notification && Notification.permission!=='denied'){ Notification.requestPermission(); } }catch(_){} }
 
-      function setPhase(p){ phase=p; if (p==='work'){ endAt = Date.now()+ S.work*60*1000; el.cycle.textContent = `状態: 作業 ${count+1}/${el.rounds.value}`; }
-        else if (p==='short'){ endAt = Date.now()+ S.short*60*1000; el.cycle.textContent = '状態: 短い休憩'; }
-        else { endAt = Date.now()+ S.long*60*1000; el.cycle.textContent = '状態: 長い休憩'; }
+      function beep(){
+        try{
+          const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+          const ac = new AC();
+          const osc = ac.createOscillator();
+          const gain = ac.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = 880;
+          osc.connect(gain); gain.connect(ac.destination);
+          const t0 = ac.currentTime;
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.linearRampToValueAtTime(0.2, t0+0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0+0.35);
+          osc.start(t0);
+          osc.stop(t0+0.4);
+          setTimeout(()=>ac.close(), 600);
+        }catch(_){ }
+      }
+
+      function updateProgress(remain){ if (!totalMs) { el.bar.style.width = '0%'; return; } const done = Math.max(0, Math.min(1, 1 - (remain/totalMs))); el.bar.style.width = (done*100).toFixed(1) + '%'; }
+
+      function setPhase(p){
+        phase=p;
+        if (p==='work'){ totalMs = S.work*60*1000; el.cycle.textContent = `状態: 作業 ${count+1}/${el.rounds.value}`; }
+        else if (p==='short'){ totalMs = S.short*60*1000; el.cycle.textContent = '状態: 短い休憩'; }
+        else { totalMs = S.long*60*1000; el.cycle.textContent = '状態: 長い休憩'; }
+        endAt = Date.now() + totalMs;
+        updateProgress(totalMs);
       }
       function renderSessions(){
         const arr=[]; for(let i=0;i<count;i++) arr.push('<span class="pill">作業</span>'); el.sessions.innerHTML = arr.join(' ');
       }
-      function tick(){ const remain = endAt - Date.now(); el.disp.textContent = mmss(remain); if (remain<=0){ clearInterval(timer); timer=null; vibrate(); if (phase==='work'){ count++; renderSessions(); const goal = +el.rounds.value; if (count%goal===0){ setPhase('long'); notify('長い休憩'); } else { setPhase('short'); notify('短い休憩'); } } else { setPhase('work'); notify('作業再開'); } start(); } }
+      function tick(){
+        const remain = endAt - Date.now();
+        el.disp.textContent = mmss(remain);
+        updateProgress(Math.max(0, remain));
+        if (remain<=0){
+          clearInterval(timer); timer=null; updateProgress(0);
+          vibrate(); beep();
+          if (phase==='work'){
+            count++; renderSessions(); const goal = +el.rounds.value;
+            if (count%goal===0){ setPhase('long'); notify('長い休憩'); }
+            else { setPhase('short'); notify('短い休憩'); }
+          } else {
+            setPhase('work'); notify('作業再開');
+          }
+          start();
+        }
+      }
 
       function start(){ if (timer) return; timer = setInterval(tick, 200); }
       function pause(){ if (!timer) return; clearInterval(timer); timer=null; }
-      function reset(){ pause(); count=0; renderSessions(); setPhase('work'); el.disp.textContent = mmss(S.work*60*1000); }
+      function reset(){ pause(); count=0; renderSessions(); setPhase('work'); el.disp.textContent = mmss(S.work*60*1000); updateProgress(0); }
       function next(){ pause(); if (phase==='work'){ count++; renderSessions(); const goal = +el.rounds.value; if (count%goal===0){ setPhase('long'); } else { setPhase('short'); } } else { setPhase('work'); } start(); }
 
       el.start.onclick = ()=>{ if (!timer){ if (!endAt) setPhase(phase); start(); } };
       el.pause.onclick = ()=> pause();
       el.reset.onclick = ()=> reset();
       el.next.onclick = ()=> next();
+
+      // プリセット
+      document.querySelector('.presets')?.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button[data-preset]'); if (!btn) return;
+        const p = btn.dataset.preset;
+        if (p==='pomodoro'){ el.work.value=25; el.short.value=5; el.long.value=15; el.rounds.value=4; }
+        else if (p==='short'){ el.work.value=10; el.short.value=2; el.long.value=5; el.rounds.value=3; }
+        else if (p==='long'){ el.work.value=45; el.short.value=10; el.long.value=20; el.rounds.value=2; }
+        saveSettings();
+        reset();
+      });
+
+      // キーボード: Space=開始/停止, R=リセット, N=次へ
+      window.addEventListener('keydown', (e)=>{
+        if (e.code==='Space') { e.preventDefault(); if (timer) pause(); else { if (!endAt) setPhase(phase); start(); } }
+        else if (e.key==='r' || e.key==='R') { reset(); }
+        else if (e.key==='n' || e.key==='N') { next(); }
+      });
 
       // SW
       if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
