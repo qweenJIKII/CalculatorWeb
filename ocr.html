@@ -44,7 +44,7 @@
       <a class="tab" href="./">電卓</a>
       <a class="tab" href="./help.html">説明</a>
       <a class="tab" href="./memo.html">メモ</a>
-      <a class="tab" href="./camera.html">QR</a>
+      <a class="tab" href="./camera.html">カメラ</a>
       <a class="tab" href="./timer.html">タイマー</a>
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
@@ -57,8 +57,9 @@
         <input id="file" type="file" accept="image/*" />
         <label>言語
           <select id="lang">
-            <option value="eng" selected>英語</option>
-            <option value="jpn">日本語</option>
+            <option value="jpn" selected>日本語</option>
+            <option value="jpn_vert">日本語(縦書き)</option>
+            <option value="eng">英語</option>
             <option value="jpn+eng">日本語+英語</option>
           </select>
         </label>
@@ -76,15 +77,28 @@
   <script>
     (function(){
       const el = { file: document.getElementById('file'), lang: document.getElementById('lang'), run: document.getElementById('run'), copy: document.getElementById('copy'), share: document.getElementById('share'), status: document.getElementById('status'), prev: document.getElementById('preview'), out: document.getElementById('out') };
-      let image = null;
+      let image = null; let worker = null;
       el.file.onchange = ()=>{
         const f = el.file.files?.[0]; if (!f) return; image = f; const url = URL.createObjectURL(f); el.prev.src = url; };
       function setStatus(t){ el.status.textContent = t; }
       el.run.onclick = async ()=>{
         if (!image){ alert('画像を選択してください'); return; }
+        const lang = el.lang.value;
         try{
+          setStatus('初期化中...');
+          if (!worker){
+            worker = await Tesseract.createWorker({ logger: m => { if (m.status && m.progress!=null){ setStatus(`${m.status} ${(m.progress*100).toFixed(0)}%`); } } });
+          }
+          await worker.loadLanguage(lang);
+          await worker.initialize(lang);
+          await worker.setParameters({
+            tessedit_pageseg_mode: '6',
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300',
+            tessedit_ocr_engine_mode: '1'
+          });
           setStatus('認識中...');
-          const { data } = await Tesseract.recognize(image, el.lang.value, { logger: m => { if (m.status && m.progress!=null){ setStatus(`${m.status} ${(m.progress*100).toFixed(0)}%`); } } });
+          const { data } = await worker.recognize(image);
           el.out.value = data?.text || '';
           setStatus('完了');
         }catch(err){ setStatus('エラー'); console.error(err); }

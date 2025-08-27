@@ -44,7 +44,7 @@
       <a class="tab" href="./">電卓</a>
       <a class="tab active" href="./help.html">説明</a>
       <a class="tab" href="./memo.html">メモ</a>
-      <a class="tab" href="./camera.html">QR</a>
+      <a class="tab" href="./camera.html">カメラ</a>
       <a class="tab" href="./timer.html">タイマー</a>
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
@@ -86,11 +86,12 @@
         <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd> で追加。改行は保持されます。チェックで完了、削除ボタンで除去。</li>
         <li>データは端末内に自動保存（localStorage: <code>calc_memo_tasks</code>）。他端末とは共有されません。</li>
       </ul>
-      <h2>QRコード共有</h2>
+      <h2>カメラ（QR / OCR）</h2>
       <ul>
-        <li>「QR」タブでURLのQRコードを生成・表示します。既定は電卓トップ（このアプリのURL）。</li>
-        <li>URL欄を書き換えて任意のページのQRを生成可能。URLのコピー/共有/PNG保存に対応。</li>
-        <li>QR画像の生成はオンライン時のみ（<code>api.qrserver.com</code>）。ページ自体はオフラインで開けます。</li>
+        <li>「カメラ」タブ内で「QRスキャン」「QR作成」「OCR」を切替できます。</li>
+        <li><strong>QRスキャン:</strong> カメラ開始→自動検出。距離プリセット/ズーム/ライトに対応。検出結果はコピー/共有/「開く」で外部ブラウザ指定も可能。</li>
+        <li><strong>QR作成:</strong> URLのQRコードを生成。既定はアプリのトップ。URLのコピー/共有/PNG保存に対応。生成はオンライン時のみ（<code>api.qrserver.com</code>）。</li>
+        <li><strong>OCR:</strong> 画像選択またはカメラ撮影から文字認識。言語は「日本語 / 日本語(縦書き: <code>jpn_vert</code>) / 日本語+英語 / 英語」から選択可。進捗表示あり、結果はコピー/共有可能。</li>
       </ul>
       <h2>履歴と永続化</h2>
       <ul>
