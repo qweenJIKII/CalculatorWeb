@@ -59,6 +59,21 @@
         </div>
         <p id="desc" style="margin:10px 0 0;">説明</p>
       </div>
+      <div id="settingsCard" class="card">
+        <div class="title2">設定</div>
+        <label class="row" style="gap:8px;">
+          <input id="useOnlineToggle" type="checkbox" />
+          <span class="muted">オンライン補完を使用（Open * Facts）</span>
+        </label>
+        <label class="row" style="gap:8px;">
+          <input id="saveHistoryToggle" type="checkbox" />
+          <span class="muted">読み込み結果を履歴に保存</span>
+        </label>
+      </div>
+      <div id="historyCard" class="card" style="display:none;">
+        <div class="title2">履歴</div>
+        <div id="historyList" class="muted"></div>
+      </div>
       <div id="specCard" class="card" style="display:none;">
         <div class="title2">仕様</div>
         <table id="specs"></table>
@@ -75,6 +90,9 @@
       const code = codeParam.replace(/\s+/g,'');
       const isLikelyCode = /^\d{8}$|^\d{12}$|^\d{13}$/.test(code);
       const state = { product:null };
+      const SETTINGS_KEY = 'cw_product_settings';
+      const HISTORY_KEY = 'cw_product_history_v1';
+      const CACHE_KEY = 'cw_product_cache_v1';
 
       function render(){
         const p = state.product || { code: code || '-', name:'不明な製品', brand:'-', category:'-', description:'一致する製品が見つかりませんでした。', specs:{} };
@@ -98,24 +116,144 @@
         } else { $('#specCard').style.display = 'none'; }
       }
 
+      // --- Online fetchers (fallback) ---
+      function normalizeFromOFF(prod, barcode){
+        if (!prod) return null;
+        const name = prod.product_name || prod.generic_name || prod.product_name_en || '';
+        const brand = (prod.brands || '').split(',')[0]?.trim() || '';
+        const category = (prod.categories || '').split(',')[0]?.trim() || '';
+        const description = prod.generic_name || prod.ingredients_text || prod.labels || '';
+        const nutr = prod.nutriments || {};
+        const specs = {};
+        if (prod.quantity) specs.quantity = prod.quantity;
+        if (prod.ingredients_text) specs.ingredients = prod.ingredients_text.split(/,\s*/).filter(Boolean);
+        const take = (k)=> (k in nutr) ? nutr[k] : undefined;
+        const nutro = {
+          energy_kcal_100g: take('energy-kcal_100g'),
+          proteins_100g: take('proteins_100g'),
+          fat_100g: take('fat_100g'),
+          carbohydrates_100g: take('carbohydrates_100g'),
+          sugars_100g: take('sugars_100g'),
+          salt_100g: take('salt_100g')
+        };
+        const nutroKeys = Object.keys(nutro).filter(k=> nutro[k] !== undefined);
+        if (nutroKeys.length) specs.nutriments = nutro;
+        if (Array.isArray(prod.brands_tags) && prod.brands_tags.length) specs.brands_tags = prod.brands_tags;
+        if (Array.isArray(prod.categories_tags) && prod.categories_tags.length) specs.categories_tags = prod.categories_tags;
+        return {
+          code: barcode,
+          name: name || '(名称不明)',
+          brand: brand || '-',
+          category: category || '-',
+          description: description,
+          specs
+        };
+      }
+
+      async function fetchFromOFFHost(host, barcode){
+        try{
+          const url = `https://${host}/api/v2/product/${encodeURIComponent(barcode)}.json`;
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) return null;
+          const json = await res.json();
+          const prod = json?.product;
+          if (!prod) return null;
+          return normalizeFromOFF(prod, barcode);
+        }catch(_){ return null; }
+      }
+
+      async function fetchOnlineProduct(barcode){
+        // Try multiple Open * Facts families to cover more product types
+        const hosts = [
+          'world.openfoodfacts.org',
+          'world.openproductsfacts.org',
+          'world.openbeautyfacts.org',
+          'world.openpetfoodfacts.org'
+        ];
+        for (const h of hosts){
+          const r = await fetchFromOFFHost(h, barcode);
+          if (r) return r;
+        }
+        return null;
+      }
+
+      // --- Settings & History ---
+      // Cache (full product objects)
+      function loadCache(){ try{ return JSON.parse(localStorage.getItem(CACHE_KEY)||'{}')||{}; }catch(_){ return {}; } }
+      function saveCache(obj){ localStorage.setItem(CACHE_KEY, JSON.stringify(obj)); }
+      function getCachedProduct(code){ if (!code) return null; const c = loadCache(); return c[code] || null; }
+      function cacheProduct(p){ if (!p || !p.code) return; const c = loadCache(); c[p.code] = p; saveCache(c); }
+
+      function loadSettings(){
+        try{ return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')||{}; }catch(_){ return {}; }
+      }
+      function saveSettings(s){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+      function getSettings(){
+        const s = loadSettings();
+        return { useOnline: s.useOnline!==false, saveHistory: s.saveHistory!==false };
+      }
+      function renderSettings(){
+        const s = getSettings();
+        const useEl = document.getElementById('useOnlineToggle');
+        const saveEl = document.getElementById('saveHistoryToggle');
+        if (useEl){ useEl.checked = !!s.useOnline; useEl.addEventListener('change', ()=>{ const cur=getSettings(); cur.useOnline = useEl.checked; saveSettings(cur); }); }
+        if (saveEl){ saveEl.checked = !!s.saveHistory; saveEl.addEventListener('change', ()=>{ const cur=getSettings(); cur.saveHistory = saveEl.checked; saveSettings(cur); renderHistory(); }); }
+      }
+
+      function loadHistory(){ try{ return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')||[]; }catch(_){ return []; } }
+      function saveHistory(list){ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }
+      function addToHistory(p){
+        if (!p || !p.code) return;
+        const s = getSettings(); if (!s.saveHistory) return;
+        let list = loadHistory();
+        list = list.filter(x=> x.code !== p.code);
+        list.unshift({ code: p.code, name: p.name||'', brand: p.brand||'', at: Date.now() });
+        if (list.length>50) list = list.slice(0,50);
+        saveHistory(list);
+      }
+      function fmtDate(ts){ try{ return new Date(ts).toLocaleString(); }catch(_){ return ''; } }
+      function renderHistory(){
+        const list = loadHistory();
+        const card = document.getElementById('historyCard');
+        const wrap = document.getElementById('historyList');
+        if (!wrap || !card) return;
+        if (!list.length){ card.style.display='none'; wrap.innerHTML=''; return; }
+        card.style.display='';
+        wrap.innerHTML = '';
+        for (const item of list){
+          const a = document.createElement('a');
+          a.href = `./product.html?code=${encodeURIComponent(item.code)}`;
+          const cached = getCachedProduct(item.code) || {};
+          const nm = cached.name || item.name || '(名称不明)';
+          const br = cached.brand || item.brand || '';
+          a.textContent = `${item.code} — ${nm} ${br?('('+br+')'):''} / ${fmtDate(item.at)}`;
+          a.style.display='block'; a.style.color='var(--text)'; a.style.textDecoration='none'; a.style.margin='4px 0';
+          wrap.appendChild(a);
+        }
+      }
+
       async function load(){
         try{
           if (!isLikelyCode && !code){ render(); return; }
+          // 0) Cache quick hit
+          state.product = getCachedProduct(code) || state.product || null;
           // 1) Local DB
           try{
             const res = await fetch('./data/products.json', { cache:'no-store' });
             if (res.ok){
               const json = await res.json();
               const list = json?.products || [];
-              state.product = list.find(p=> (p.code||'') === code) || null;
+              state.product = list.find(p=> (p.code||'') === code) || state.product || null;
             }
           }catch(_){ /* ignore */ }
           // 2) Online fallback if not found locally
-          if (!state.product){
+          const s = getSettings();
+          if (!state.product && s.useOnline){
             state.product = await fetchOnlineProduct(code);
           }
         }catch(_){ state.product = null; }
         render();
+        if (state.product){ cacheProduct(state.product); addToHistory(state.product); renderHistory(); }
       }
 
       async function share(){
@@ -130,6 +268,8 @@
 
       // SW best-effort
       if ('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
+      renderSettings();
+      renderHistory();
       load();
     })();
   </script>
