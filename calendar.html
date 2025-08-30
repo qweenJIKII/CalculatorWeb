@@ -324,13 +324,15 @@
           }
         }
         cell.appendChild(head); cell.appendChild(evWrap);
+        // Capture immutable y/m/day to avoid mutated Date reference in closure
+        const y_ = d.getFullYear(), m_ = d.getMonth(), day_ = d.getDate();
         cell.addEventListener('click', ()=>{
           // Fill form with selected date (09:00 - 10:00)
-          const s = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0, 0);
-          const e = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 10, 0, 0);
+          const s = new Date(y_, m_, day_, 9, 0, 0);
+          const e = new Date(y_, m_, day_, 10, 0, 0);
           startEl.value = toLocalInputValue(s);
           endEl.value = toLocalInputValue(e);
-          if (!titleEl.value) titleEl.value = `${d.getMonth()+1}/${d.getDate()} の予定`;
+          if (!titleEl.value) titleEl.value = `${m_+1}/${day_} の予定`;
           // focus title for quick typing
           titleEl.focus();
         });
