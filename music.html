@@ -9,6 +9,7 @@
   <style>
     :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; --ok:#4ade80; --danger:#ff6b6b; }
     html,body{height:100%}
+    *,*::before,*::after{ box-sizing: border-box; }
     body{
       margin:0;
       background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%);
@@ -17,7 +18,7 @@
       display:flex; align-items:flex-start; justify-content:center;
       min-height:100dvh; padding: 16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
     }
-    .app{ width:min(980px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .app{ width:min(980px, 100%); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
     .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
     .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
     .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; flex:0 0 auto; white-space:nowrap; }
@@ -45,8 +46,11 @@
     .eq label{ text-align:center; font-size:11px; color:var(--muted); }
 
     .canvasWrap{ border:1px solid rgba(255,255,255,.08); border-radius:10px; overflow:hidden; }
+    img, canvas, video{ max-width:100%; height:auto; }
+    .canvasWrap canvas{ width:100%; height:auto; display:block; }
 
     @media (max-width: 880px){ .content{ grid-template-columns: 1fr; } }
+    @media (max-width: 520px){ body{ padding: 12px env(safe-area-inset-right) calc(12px + env(safe-area-inset-bottom)) env(safe-area-inset-left); } .controls{ grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -331,7 +335,17 @@
     el.xfadeSec.oninput = ()=>{ S.xfadeSec = (+el.xfadeSec.value)|0; localStorage.setItem('music_xfade_sec', String(S.xfadeSec)); };
 
     // Visualization
-    const ctx2d = el.viz.getContext('2d');
+    let ctx2d = el.viz.getContext('2d');
+    function resizeViz(){
+      const ratio = Math.min(window.devicePixelRatio||1, 2);
+      const w = el.viz.clientWidth || (el.viz.parentElement?.clientWidth) || 320;
+      const h = Math.max(120, Math.round(w * 0.20));
+      el.viz.width = Math.round(w * ratio);
+      el.viz.height = Math.round(h * ratio);
+      ctx2d = el.viz.getContext('2d');
+    }
+    window.addEventListener('resize', resizeViz, { passive:true });
+    resizeViz();
     function draw(){
       const an = activeGraph().analyser; const N = an.frequencyBinCount; const arr = new Uint8Array(N); an.getByteFrequencyData(arr);
       ctx2d.fillStyle = '#0b0e1a'; ctx2d.fillRect(0,0,el.viz.width, el.viz.height);
