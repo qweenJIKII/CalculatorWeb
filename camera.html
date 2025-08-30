@@ -84,6 +84,8 @@
         <button id="tabQR" class="inner-tab" role="tab" aria-selected="true" aria-controls="panelQR">QRスキャン</button>
         <button id="tabQRGen" class="inner-tab" role="tab" aria-selected="false" aria-controls="panelQRGen">QR作成</button>
         <button id="tabOCR" class="inner-tab" role="tab" aria-selected="false" aria-controls="panelOCR">OCR</button>
+        <button id="tabBAR" class="inner-tab" role="tab" aria-selected="false" aria-controls="panelBAR">バーコード</button>
+        <button id="tabCodeGen" class="inner-tab" role="tab" aria-selected="false" aria-controls="panelCodeGen">コード作成</button>
       </div>
 
       <!-- QR作成 Panel -->
@@ -116,6 +118,61 @@
           <a id="dlBtn" download="calculator-qr.png" class="tab" style="text-decoration:none;">PNG保存</a>
         </div>
         <div class="hint">QR画像はオンライン時に生成されます（api.qrserver.com）。オフライン時はページだけ開きます。</div>
+      </section>
+
+      <!-- BARCODE Scan Panel -->
+      <section id="panelBAR" class="panel" role="tabpanel" aria-hidden="true">
+        <div class="row" style="justify-content:center; gap:8px;">
+          <button id="barStart" class="btn">カメラで読み取り</button>
+          <button id="barStop" class="btn">停止</button>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            距離
+            <select id="barDistance" class="control">
+              <option value="standard">標準</option>
+              <option value="near">近距離</option>
+              <option value="far">遠距離</option>
+            </select>
+          </label>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            ズーム
+            <input id="barZoom" class="control" type="range" min="1" max="1" step="0.1" value="1" style="width:160px;">
+          </label>
+          <button id="barTorch" class="btn" title="ライト切替">ライト</button>
+          <span class="hint">結果: <span id="barOut">-</span></span>
+        </div>
+        <video id="barVideo" class="video" playsinline muted></video>
+        <div class="row" style="justify-content:center; gap:8px;">
+          <button id="barCopy" class="btn">コピー</button>
+          <span class="hint">対応: JAN(EAN-13/EAN-8), Code128, UPC-A/E, ITF, Codabar など（対応はブラウザ依存）</span>
+        </div>
+      </section>
+
+      <!-- CODE Generator Panel (QR / Barcodes) -->
+      <section id="panelCodeGen" class="panel" role="tabpanel" aria-hidden="true">
+        <div class="row" style="gap:8px;">
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">種類
+            <select id="codeType" class="control">
+              <option value="qr" selected>QR</option>
+              <option value="ean13">EAN-13</option>
+              <option value="ean8">EAN-8</option>
+              <option value="code128">Code128</option>
+              <option value="code39">Code39</option>
+              <option value="itf">ITF</option>
+              <option value="upca">UPC-A</option>
+              <option value="upce">UPC-E</option>
+              <option value="codabar">Codabar</option>
+            </select>
+          </label>
+          <input id="codeInput" type="text" placeholder="文字列 / 数字 (EANは桁数要件あり)" aria-label="コード入力" />
+          <button id="codeGenBtn" class="btn">生成</button>
+          <button id="codeSaveBtn" class="btn">PNG保存</button>
+          <a id="codeSaveSvgBtn" class="tab" style="text-decoration:none;" download="barcode.svg">SVG保存</a>
+        </div>
+        <div class="qrwrap" style="gap:12px;">
+          <img id="codeQRImg" alt="QRコード" src="" style="display:none; width:240px; height:240px;" />
+          <svg id="codeBarcodeSvg" xmlns="http://www.w3.org/2000/svg" style="display:none; background:transparent;"></svg>
+        </div>
+        <div class="hint">JsBarcodeでバーコードを生成。QRはオンライン生成（api.qrserver.com）。</div>
       </section>
 
       <!-- QR Panel -->
@@ -251,29 +308,43 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.4.0/dist/quagga.min.js"></script>
   <script>
     (function(){
       // inner tab switching
       const tabQR = document.getElementById('tabQR');
       const tabQRGen = document.getElementById('tabQRGen');
       const tabOCR = document.getElementById('tabOCR');
+      const tabBAR = document.getElementById('tabBAR');
+      const tabCodeGen = document.getElementById('tabCodeGen');
       const panelQR = document.getElementById('panelQR');
       const panelQRGen = document.getElementById('panelQRGen');
       const panelOCR = document.getElementById('panelOCR');
+      const panelBAR = document.getElementById('panelBAR');
+      const panelCodeGen = document.getElementById('panelCodeGen');
       function selectTab(which){
         const isQR = which === 'qr';
         const isQRGen = which === 'qrgen';
         const isOCR = which === 'ocr';
+        const isBAR = which === 'bar';
+        const isCodeGen = which === 'codegen';
         tabQR.setAttribute('aria-selected', isQR ? 'true':'false');
         tabQRGen.setAttribute('aria-selected', isQRGen ? 'true':'false');
         tabOCR.setAttribute('aria-selected', isOCR ? 'true':'false');
+        tabBAR.setAttribute('aria-selected', isBAR ? 'true':'false');
+        tabCodeGen.setAttribute('aria-selected', isCodeGen ? 'true':'false');
         panelQR.setAttribute('aria-hidden', isQR ? 'false':'true');
         panelQRGen.setAttribute('aria-hidden', isQRGen ? 'false':'true');
         panelOCR.setAttribute('aria-hidden', isOCR ? 'false':'true');
+        panelBAR.setAttribute('aria-hidden', isBAR ? 'false':'true');
+        panelCodeGen.setAttribute('aria-hidden', isCodeGen ? 'false':'true');
       }
-      tabQR.addEventListener('click', ()=> { selectTab('qr'); stopOcrCam(); });
-      tabQRGen.addEventListener('click', ()=> { selectTab('qrgen'); stopScan(); stopOcrCam(); });
-      tabOCR.addEventListener('click', ()=> { selectTab('ocr'); stopScan(); });
+      tabQR.addEventListener('click', ()=> { selectTab('qr'); stopOcrCam(); stopBarScan(); });
+      tabQRGen.addEventListener('click', ()=> { selectTab('qrgen'); stopScan(); stopOcrCam(); stopBarScan(); });
+      tabOCR.addEventListener('click', ()=> { selectTab('ocr'); stopScan(); stopBarScan(); });
+      tabBAR.addEventListener('click', ()=> { selectTab('bar'); stopScan(); stopOcrCam(); });
+      tabCodeGen.addEventListener('click', ()=> { selectTab('codegen'); stopScan(); stopOcrCam(); stopBarScan(); });
       function selectByHash(){ const h=(location.hash||'').replace('#',''); if (h==='ocr'){ selectTab('ocr'); } else if (h==='qrgen'){ selectTab('qrgen'); } }
       window.addEventListener('hashchange', selectByHash);
       if (location.hash) selectByHash();
@@ -444,8 +515,161 @@
       document.getElementById('modalOpenNow').addEventListener('click', ()=>{ const url = modalUrl.textContent||''; hideOpenModal(); openWith(url, chosenBrowser); });
       // ポップアップからQR作成/保存
       document.getElementById('modalMakeQR').addEventListener('click', ()=>{ const url = (modalUrl.textContent||'').trim(); if (!url) return; try{ if (input){ input.value = url; update(); } selectTab('qrgen'); location.hash = 'qrgen'; }catch(_){} hideOpenModal(); });
-      document.getElementById('modalSaveQR').addEventListener('click', ()=>{ const url = (modalUrl.textContent||'').trim(); if (!url) return; try{ const q = buildQrUrl(url); const a = document.createElement('a'); a.href = q; a.download = 'qr-from-scan.png'; document.body.appendChild(a); a.click(); a.remove(); }catch(_){} });
+      document.getElementById('modalSaveQR').addEventListener('click', ()=>{ const url = (modalUrl.textContent||'').trim(); if (!url) return; try{ const q = buildQrUrl(url); const a = document.createElement('a'); a.href = q; a.download = 'qr-from-scan.png'; document.body.appendChild(a); a.click(); a.remove(); }catch(_){ } });
       window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && openModal.getAttribute('aria-hidden')==='false') hideOpenModal(); });
+
+      // ===== BARCODE Scanner =====
+      const barStart = document.getElementById('barStart');
+      const barStop = document.getElementById('barStop');
+      const barOut = document.getElementById('barOut');
+      const barCopy = document.getElementById('barCopy');
+      const barVideo = document.getElementById('barVideo');
+      const barDistanceSel = document.getElementById('barDistance');
+      const barZoomRange = document.getElementById('barZoom');
+      const barTorchBtn = document.getElementById('barTorch');
+      let barStream=null, barVideoTrack=null, barCaps=null, barSettings=null, barRunning=false, barRAF=0, barDetector=null, barTorchOn=false;
+      let barNoDetectFrames=0, barLastManualZoomTs=0, barZoomApplying=false, barPendingZoom=null, barLastAppliedZoom=null;
+      function setBarOut(text){ barOut.textContent = text || '-'; }
+      function parseBarcodeResult(result){
+        if (!result) return '-';
+        const fmt = result.format || result.type || 'unknown';
+        const val = result.rawValue || result.value || '';
+        return `${val} (${fmt})`;
+      }
+      async function startBarScan(){
+        if (barRunning) return; barRunning=true; setBarOut('-');
+        let lastErr=null; const baseVideo={ facingMode:'environment' };
+        const candidates=[
+          { width:{ideal:2560}, height:{ideal:1440}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} },
+          { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} },
+          { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:60}, aspectRatio:{ideal:16/9} },
+          { width:{ideal:1280}, height:{ideal:720} },
+          {}
+        ];
+        for (const v of candidates){ try{ barStream = await navigator.mediaDevices.getUserMedia({ video:{...baseVideo, ...v}, audio:false }); if (barStream) break; }catch(e){ lastErr=e; } }
+        if (!barStream){ barRunning=false; alert('カメラにアクセスできません'); return; }
+        barVideo.srcObject = barStream; await barVideo.play().catch(()=>{});
+        barVideoTrack = barStream.getVideoTracks?.()[0]||null;
+        barCaps = barVideoTrack?.getCapabilities?.()||null;
+        barSettings = barVideoTrack?.getSettings?.()||null;
+        try{
+          const adv=[];
+          if (barCaps?.focusMode && barCaps.focusMode.includes('continuous')) adv.push({ focusMode:'continuous' });
+          if (barCaps?.exposureMode && barCaps.exposureMode.includes('continuous')) adv.push({ exposureMode:'continuous' });
+          if (barCaps?.whiteBalanceMode && barCaps.whiteBalanceMode.includes('continuous')) adv.push({ whiteBalanceMode:'continuous' });
+          if (adv.length) await barVideoTrack.applyConstraints({ advanced: adv });
+        }catch(_){ }
+        if (barCaps?.zoom){
+          barZoomRange.min = barCaps.zoom.min ?? 1;
+          barZoomRange.max = barCaps.zoom.max ?? 1;
+          barZoomRange.step = barCaps.zoom.step ?? 0.1;
+          barZoomRange.value = barSettings?.zoom ?? barCaps.zoom.min ?? 1;
+          barZoomRange.disabled = false;
+        } else { barZoomRange.disabled = true; }
+        if (barCaps && 'torch' in barCaps){ barTorchBtn.disabled = false; } else { barTorchBtn.disabled = true; }
+        if (window.BarcodeDetector){
+          try{ barDetector = new window.BarcodeDetector({ formats: ['ean_13','ean_8','code_128','upc_a','upc_e','itf','codabar'] }); }catch(_){ barDetector=null; }
+        }
+        const useRVFC = typeof barVideo.requestVideoFrameCallback === 'function';
+        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently:true });
+        await applyBarDistanceZoom();
+        barNoDetectFrames=0;
+        const scanOnce = async ()=>{
+          if (!barRunning) return; if (!(barVideo && barVideo.readyState>=2)) return; const w=barVideo.videoWidth|0, h=barVideo.videoHeight|0; if (!w||!h) return;
+          if (barDetector){
+            try{ const codes = await barDetector.detect(barVideo); if (codes && codes.length){ const r=codes[0]; const text=parseBarcodeResult(r); setBarOut(text); try{ navigator.vibrate?.(40); }catch(_){} stopBarScan(); return; } }catch(_){ }
+          }
+          // simple brightness/contrast boost for tough frames when needed (optional)
+          canvas.width=w; canvas.height=h; ctx.drawImage(barVideo,0,0,w,h);
+          barNoDetectFrames++;
+          if ((barNoDetectFrames % 20 === 0) && barCaps?.zoom){
+            const now=Date.now(); if ((now - barLastManualZoomTs) > 1500 && !barZoomApplying){
+              const cur=parseFloat(barZoomRange.value||'1'); const step=(barCaps.zoom.step??0.1)||0.1; const next=Math.min((barCaps.zoom.max??cur), cur+step);
+              if (next>cur){ barZoomRange.value=String(next); await setBarZoom(next); }
+            }
+          }
+        };
+        if (useRVFC){ const cb = async ()=>{ if (!barRunning) return; await scanOnce(); barVideo.requestVideoFrameCallback(cb); }; barVideo.requestVideoFrameCallback(cb); }
+        else { const loop = async ()=>{ if (!barRunning) return; await scanOnce(); barRAF = requestAnimationFrame(loop); }; barRAF = requestAnimationFrame(loop); }
+      }
+      function stopBarScan(){ barRunning=false; cancelAnimationFrame(barRAF); barRAF=0; if (barVideo){ try{ barVideo.pause(); }catch(_){} barVideo.srcObject=null; } if (barStream){ for (const t of barStream.getTracks?.()||[]){ try{ t.stop(); }catch(_){} } barStream=null; } barVideoTrack=null; barCaps=null; barSettings=null; }
+      async function setBarZoom(val){ if (!barVideoTrack || !barCaps?.zoom) return; const minZ=barCaps.zoom.min??1; const maxZ=barCaps.zoom.max??val; const stepZ=barCaps.zoom.step??0.1; const roundToStep=(v)=> Math.max(minZ, Math.min(maxZ, (Math.round((v-minZ)/stepZ)*stepZ + minZ))); const target=roundToStep(val); barPendingZoom = target; if (barZoomApplying) return; barZoomApplying=true; try{ while(barPendingZoom!=null){ const z=barPendingZoom; barPendingZoom=null; if (barLastAppliedZoom!=null && Math.abs(z-barLastAppliedZoom) < (stepZ*0.5)){ continue; } try{ await barVideoTrack.applyConstraints({ advanced:[{ zoom:z }] }); barLastAppliedZoom = z; }catch(_){ } if (barPendingZoom!=null){ await new Promise(r=> requestAnimationFrame(()=> r())); } } } finally { barZoomApplying=false; } }
+      async function applyBarDistanceZoom(){ if (!barCaps?.zoom) return; const min=barCaps.zoom.min??1, max=barCaps.zoom.max??1; let target=min; const mid=(min+max)/2; if (barDistanceSel.value==='near'){ target = Math.max(min, max*0.75); } else if (barDistanceSel.value==='standard'){ target = mid; } else { target = min; } barZoomRange.value = target; await setBarZoom(target); }
+      barDistanceSel.addEventListener('change', ()=>{ applyBarDistanceZoom(); });
+      barZoomRange.addEventListener('input', ()=>{ barLastManualZoomTs = Date.now(); const z=parseFloat(barZoomRange.value); if (!barZoomApplying){ requestAnimationFrame(()=> setBarZoom(z)); } else { barPendingZoom = z; } });
+      barZoomRange.addEventListener('change', ()=>{ const z=parseFloat(barZoomRange.value); setBarZoom(z); });
+      barTorchBtn.addEventListener('click', async ()=>{ if (!barVideoTrack) return; barTorchOn=!barTorchOn; try{ await barVideoTrack.applyConstraints({ advanced:[{ torch: barTorchOn }] }); }catch(_){ barTorchOn=!barTorchOn; } });
+      barStart.addEventListener('click', startBarScan);
+      barStop.addEventListener('click', stopBarScan);
+      barCopy.addEventListener('click', async ()=>{ try{ await navigator.clipboard?.writeText(barOut.textContent||''); }catch(_){} });
+
+      // ===== CODE Generator (QR & Barcodes) =====
+      const codeType = document.getElementById('codeType');
+      const codeInput = document.getElementById('codeInput');
+      const codeGenBtn = document.getElementById('codeGenBtn');
+      const codeSaveBtn = document.getElementById('codeSaveBtn');
+      const codeSaveSvgBtn = document.getElementById('codeSaveSvgBtn');
+      const codeQRImg = document.getElementById('codeQRImg');
+      const codeBarcodeSvg = document.getElementById('codeBarcodeSvg');
+      function showQR(url){ codeQRImg.style.display='block'; codeBarcodeSvg.style.display='none'; codeQRImg.src=url; }
+      function showSVG(){ codeQRImg.style.display='none'; codeBarcodeSvg.style.display='block'; }
+      function jsBarcodeFormat(type){
+        switch(type){
+          case 'ean13': return 'ean13';
+          case 'ean8': return 'ean8';
+          case 'code128': return 'code128';
+          case 'code39': return 'code39';
+          case 'itf': return 'itf14';
+          case 'upca': return 'upc';
+          case 'upce': return 'upce';
+          case 'codabar': return 'codabar';
+          default: return 'code128';
+        }
+      }
+      function generateCode(){
+        const t = codeType.value; const v = (codeInput.value||'').trim(); if (!v){ alert('入力が空です'); return; }
+        if (t==='qr'){
+          const url = buildQrUrl(v); showQR(url); codeSaveSvgBtn.href = ''; return;
+        }
+        if (!window.JsBarcode){ alert('JsBarcodeの読み込みに失敗しました'); return; }
+        // clear current svg
+        while (codeBarcodeSvg.firstChild) codeBarcodeSvg.removeChild(codeBarcodeSvg.firstChild);
+        const fmt = jsBarcodeFormat(t);
+        try{
+          JsBarcode(codeBarcodeSvg, v, { format: fmt, lineColor:'#e9ecf1', background:'transparent', width:2, height:120, displayValue:true, fontOptions:'bold', margin:10 });
+          showSVG();
+          // prepare SVG download link
+          try{
+            const serializer = new XMLSerializer();
+            const svgStr = serializer.serializeToString(codeBarcodeSvg);
+            const blob = new Blob([svgStr], { type:'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            codeSaveSvgBtn.href = url;
+          }catch(_){ codeSaveSvgBtn.href=''; }
+        }catch(err){ alert('生成に失敗しました: ' + (err?.message||err)); }
+      }
+      function downloadPNG(){
+        const t = codeType.value;
+        if (t==='qr'){
+          const src = codeQRImg?.src; if (!src){ alert('先に生成してください'); return; }
+          const a = document.createElement('a'); a.href = src; a.download='qr.png'; document.body.appendChild(a); a.click(); a.remove(); return;
+        }
+        // SVG -> PNG
+        try{
+          const serializer = new XMLSerializer(); const svgStr = serializer.serializeToString(codeBarcodeSvg);
+          const svgBlob = new Blob([svgStr], { type:'image/svg+xml' }); const url = URL.createObjectURL(svgBlob);
+          const img = new Image(); img.onload = ()=>{
+            const w = Math.max(1, codeBarcodeSvg.viewBox?.baseVal?.width || codeBarcodeSvg.width?.baseVal?.value || img.width);
+            const h = Math.max(1, codeBarcodeSvg.viewBox?.baseVal?.height || codeBarcodeSvg.height?.baseVal?.value || img.height);
+            const canvas = document.createElement('canvas'); canvas.width=w; canvas.height=h; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(0,0,w,h); ctx.drawImage(img, 0,0);
+            canvas.toBlob((blob)=>{ if (!blob) return; const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='barcode.png'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }, 'image/png', 1);
+          }; img.onerror = ()=>{ URL.revokeObjectURL(url); alert('PNG生成に失敗しました'); };
+          img.src = url;
+        }catch(_){ alert('PNG生成に失敗しました'); }
+      }
+      codeGenBtn?.addEventListener('click', generateCode);
+      codeSaveBtn?.addEventListener('click', downloadPNG);
 
       // ===== OCR (from ocr.html) =====
       const ocr = { file: document.getElementById('file'), lang: document.getElementById('lang'), run: document.getElementById('run'), copy: document.getElementById('copy'), share: document.getElementById('share'), status: document.getElementById('status'), prev: document.getElementById('preview'), out: document.getElementById('out') };
@@ -733,12 +957,13 @@
       });
 
       // Auto stop when tab becomes hidden to release camera
-      document.addEventListener('visibilitychange', ()=>{ if (document.hidden){ try{ stopScan(); }catch(_){} try{ stopOcrCam(); }catch(_){} } });
+      document.addEventListener('visibilitychange', ()=>{ if (document.hidden){ try{ stopScan(); }catch(_){} try{ stopOcrCam(); }catch(_){} try{ stopBarScan(); }catch(_){} } });
 
       // Cleanup on page hide/unload
       const cleanup = async ()=>{
         try{ stopScan(); }catch(_){ }
         try{ stopOcrCam(); }catch(_){ }
+        try{ stopBarScan(); }catch(_){ }
         try{ await ocrWorker?.terminate?.(); }catch(_){ try{ ocrWorker?.worker?.terminate?.(); }catch(_){} }
       };
       window.addEventListener('pagehide', cleanup);
