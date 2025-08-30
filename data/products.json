@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "version": 1,
+    "updated": "2025-08-30T00:00:00Z"
+  },
+  "products": [
+    {
+      "code": "4901234567894",
+      "name": "サンプル飲料 500ml",
+      "brand": "Cascade Foods",
+      "category": "飲料",
+      "price": 120,
+      "currency": "JPY",
+      "description": "リフレッシュできる無糖スパークリングウォーター。",
+      "specs": { "volume_ml": 500, "ingredients": ["水", "炭酸"] }
+    },
+    {
+      "code": "49012345",
+      "name": "サンプルお菓子 60g",
+      "brand": "Cascade Snacks",
+      "category": "スナック",
+      "price": 150,
+      "currency": "JPY",
+      "description": "軽い塩味のポテトチップス。",
+      "specs": { "weight_g": 60, "allergy": ["じゃがいも"] }
+    },
+    {
+      "code": "012345678905",
+      "name": "Sample UPC-A Item",
+      "brand": "Cascade",
+      "category": "General",
+      "price": 980,
+      "currency": "JPY",
+      "description": "UPC-A の例示用製品。",
+      "specs": { "color": "Black" }
+    }
+  ]
+}

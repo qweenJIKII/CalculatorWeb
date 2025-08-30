@@ -78,6 +78,8 @@
       <a class="tab" href="./password.html">PW</a>
       <a class="tab" href="./voice.html">音声</a>
       <a class="tab" href="./music.html">音楽</a>
+      <a class="tab" href="./product.html">製品</a>
+      <a class="tab" href="./calendar.html">カレンダー</a>
     </nav>
 
     <section class="content">
@@ -412,6 +414,13 @@
       function handleDetected(text){ if (!text) return; setScanOut(text); try{ navigator.vibrate?.(40); }catch(_){ }
         // スキャン結果をQR作成パネルへ自動反映
         try{ if (input){ input.value = text; update(); } }catch(_){ }
+        // 製品コード（8/12/13桁の数値）の場合は製品詳細へ遷移
+        try{
+          const code = (text||'').trim();
+          if (/^\d{8}$|^\d{12}$|^\d{13}$/.test(code)){
+            stopScan(); location.href = `./product.html?code=${encodeURIComponent(code)}`; return;
+          }
+        }catch(_){ }
         stopScan(); showOpenModal(text);
       }
 
@@ -580,7 +589,26 @@
         const scanOnce = async ()=>{
           if (!barRunning) return; if (!(barVideo && barVideo.readyState>=2)) return; const w=barVideo.videoWidth|0, h=barVideo.videoHeight|0; if (!w||!h) return;
           if (barDetector){
-            try{ const codes = await barDetector.detect(barVideo); if (codes && codes.length){ const r=codes[0]; const text=parseBarcodeResult(r); setBarOut(text); try{ navigator.vibrate?.(40); }catch(_){} stopBarScan(); return; } }catch(_){ }
+            try{
+              const codes = await barDetector.detect(barVideo);
+              if (codes && codes.length){
+                const r=codes[0];
+                const fmt = r.format || r.type || 'unknown';
+                const val = r.rawValue || r.value || '';
+                const text = `${val} (${fmt})`;
+                setBarOut(text);
+                try{ navigator.vibrate?.(40); }catch(_){}
+                // 製品コードに一致する場合は製品詳細へ
+                try{
+                  const code = (val||'').trim();
+                  if (/^\d{8}$|^\d{12}$|^\d{13}$/.test(code)){
+                    stopBarScan(); location.href = `./product.html?code=${encodeURIComponent(code)}`; return;
+                  }
+                }catch(_){ }
+                stopBarScan();
+                return;
+              }
+            }catch(_){ }
           }
           // simple brightness/contrast boost for tough frames when needed (optional)
           canvas.width=w; canvas.height=h; ctx.drawImage(barVideo,0,0,w,h);

@@ -62,12 +62,15 @@
       <a class="tab" href="./">電卓</a>
       <a class="tab" href="./help.html">説明</a>
       <a class="tab" href="./memo.html">メモ</a>
+      <a class="tab" href="./camera.html">カメラ</a>
       <a class="tab active" href="./qr.html">QR</a>
       <a class="tab" href="./timer.html">タイマー</a>
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
       <a class="tab" href="./voice.html">音声</a>
       <a class="tab" href="./music.html">音楽</a>
+      <a class="tab" href="./product.html">製品</a>
+      <a class="tab" href="./calendar.html">カレンダー</a>
     </nav>
 
     <section class="content">
@@ -258,7 +261,14 @@
         setScanOut(text);
         try{ navigator.vibrate?.(40); }catch(_){ }
         input.value = text; update();
-        // Stop scanning and show browser selection modal
+        // 数値のみ（8/12/13桁）なら製品詳細へ遷移
+        try{
+          const code = (text||'').trim();
+          if (/^\d{8}$|^\d{12}$|^\d{13}$/.test(code)){
+            stopScan(); location.href = `./product.html?code=${encodeURIComponent(code)}`; return;
+          }
+        }catch(_){ }
+        // URLなどは既存フロー（モーダルで開く先を選択）
         stopScan();
         showOpenModal(text);
       }

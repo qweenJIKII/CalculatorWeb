@@ -4,7 +4,7 @@
   - Network-first for navigation, fallback to cache, then offline page
   - Stale-while-revalidate for static assets
 */
-const VERSION = 'v1.5.4';
+const VERSION = 'v1.5.7';
 const CACHE_NAME = `calc-cache-${VERSION}`;
 const CORE_ASSETS = [
   './',
@@ -19,7 +19,10 @@ const CORE_ASSETS = [
   './password.html',
   './voice.html',
   './music.html',
-  './camera.html'
+  './camera.html',
+  './product.html',
+  './calendar.html',
+  './data/products.json'
 ];
 
 self.addEventListener('install', (event) => {

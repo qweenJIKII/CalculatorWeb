@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171a2b" />
+  <title>カレンダー | 簡易電卓</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; }
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%);
+      color:var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+      display:flex; align-items:flex-start; justify-content:center;
+      min-height:100dvh;
+      padding: 16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+      overflow:auto;
+    }
+    .app{ width:min(920px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; flex:0 0 auto; white-space:nowrap; }
+    .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .content{ padding:16px 14px 22px; }
+
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .control{ padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    button.btn{ padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:700; cursor:pointer; }
+    .hint{ color:var(--muted); font-size:12px; }
+    input[type="datetime-local"], input[type="date"], input[type="time"], input[type="text"], input[type="url"], textarea{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.15); color:var(--text); }
+    textarea{ width:100%; min-height:100px; }
+
+    .grid{ display:grid; grid-template-columns: 1fr; gap:12px; }
+    .card{ padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); }
+
+    .events{ display:flex; flex-direction:column; gap:8px; }
+    .event{ display:flex; justify-content:space-between; gap:8px; align-items:center; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); }
+    .event-title{ font-weight:700; }
+    .event-sub{ color:var(--muted); font-size:12px; }
+    .event-actions{ display:flex; gap:8px; }
+
+    @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="カレンダー">
+    <div class="header">
+      <div class="title">簡易電卓 - カレンダー</div>
+      <div class="hint">イベントの作成・編集・通知・共有</div>
+    </div>
+
+    <nav class="tabs" aria-label="ナビゲーション">
+      <a class="tab" href="./">電卓</a>
+      <a class="tab" href="./help.html">説明</a>
+      <a class="tab" href="./memo.html">メモ</a>
+      <a class="tab" href="./camera.html">カメラ</a>
+      <a class="tab" href="./timer.html">タイマー</a>
+      <a class="tab" href="./convert.html">換算</a>
+      <a class="tab" href="./password.html">PW</a>
+      <a class="tab" href="./voice.html">音声</a>
+      <a class="tab" href="./music.html">音楽</a>
+      <a class="tab" href="./product.html">製品</a>
+      <a class="tab active" href="./calendar.html">カレンダー</a>
+    </nav>
+
+    <section class="content">
+      <div class="grid">
+        <section class="card" aria-labelledby="formTitle">
+          <div id="formTitle" class="event-title">イベント作成 / 編集</div>
+          <div class="row">
+            <input id="title" type="text" placeholder="タイトル" aria-label="タイトル" />
+          </div>
+          <div class="row">
+            <label class="hint">開始<input id="start" type="datetime-local" class="control" aria-label="開始" /></label>
+            <label class="hint">終了<input id="end" type="datetime-local" class="control" aria-label="終了" /></label>
+          </div>
+          <div class="row">
+            <input id="location" type="text" placeholder="場所 (任意)" aria-label="場所" />
+          </div>
+          <div class="row">
+            <textarea id="notes" placeholder="メモ (任意)" aria-label="メモ"></textarea>
+          </div>
+          <div class="row">
+            <label class="hint">リマインダー(分前)
+              <input id="reminder" type="number" min="0" step="5" class="control" style="width:120px;" placeholder="10" aria-label="リマインダー" />
+            </label>
+            <button id="addReminder" class="btn">追加</button>
+            <div id="reminderList" class="hint"></div>
+          </div>
+          <div class="row" style="justify-content:flex-end; gap:8px;">
+            <button id="save" class="btn">保存</button>
+            <button id="reset" class="btn">クリア</button>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="toolsTitle">
+          <div id="toolsTitle" class="event-title">ツール</div>
+          <div class="row" style="gap:8px; flex-wrap:wrap;">
+            <button id="exportIcs" class="btn">ICS書き出し(単一)</button>
+            <button id="exportAllIcs" class="btn">ICS書き出し(全件)</button>
+            <button id="openGoogle" class="btn">Googleカレンダーに追加</button>
+            <button id="shareBtn" class="btn">共有</button>
+          </div>
+          <div class="hint">通知はブラウザの許可が必要です。ページを閉じるとローカル通知は動作しません。</div>
+        </section>
+
+        <section class="card" aria-labelledby="listTitle">
+          <div id="listTitle" class="event-title">イベント一覧</div>
+          <div id="list" class="events" role="list"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Local storage
+    const STORAGE_KEY = 'calc_calendar_events_v1';
+    /** @type {Array<{id:string,title:string,start:string,end:string,location?:string,notes?:string,reminders:number[]}>} */
+    let events = [];
+    let editingId = null;
+
+    const $ = (id) => document.getElementById(id);
+    const titleEl = $('title');
+    const startEl = $('start');
+    const endEl = $('end');
+    const locationEl = $('location');
+    const notesEl = $('notes');
+    const reminderEl = $('reminder');
+    const reminderListEl = $('reminderList');
+
+    function load(){
+      try{ events = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')||[]; }catch(_){ events=[]; }
+      renderList();
+    }
+    function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(events)); renderList(); scheduleReminders(); }
+
+    function fmt(dt){
+      try{ const d=new Date(dt); return `${d.toLocaleString()}`; }catch(_){ return dt||''; }
+    }
+    function toICSDate(dt){
+      const d = new Date(dt);
+      const pad = (n) => String(n).padStart(2,'0');
+      const yyyy = d.getUTCFullYear();
+      const mm = pad(d.getUTCMonth()+1);
+      const dd = pad(d.getUTCDate());
+      const hh = pad(d.getUTCHours());
+      const mi = pad(d.getUTCMinutes());
+      const ss = pad(d.getUTCSeconds());
+      return `${yyyy}${mm}${dd}T${hh}${mi}${ss}Z`;
+    }
+    function makeIcs(e){
+      const parts = [
+        'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//CalculatorWeb//Calendar//JA','CALSCALE:GREGORIAN','METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${e.id}@calculatorweb`,
+        `DTSTAMP:${toICSDate(new Date())}`,
+        `DTSTART:${toICSDate(e.start)}`,
+        `DTEND:${toICSDate(e.end || e.start)}`,
+        `SUMMARY:${escapeText(e.title||'')}`,
+      ];
+      if (e.location) parts.push(`LOCATION:${escapeText(e.location)}`);
+      if (e.notes) parts.push(`DESCRIPTION:${escapeText(e.notes)}`);
+      // VALARMs for reminders
+      parts.push(...linesForValarms(e.reminders, e));
+      parts.push('END:VEVENT','END:VCALENDAR');
+      return parts.join('\r\n');
+    }
+    function escapeText(s){ return String(s).replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,|;/g, (m)=>'\\'+m); }
+
+    // Build VALARM sections for ICS from reminders (minutes before start)
+    function linesForValarms(reminders, e){
+      const out = [];
+      if (!Array.isArray(reminders)) return out;
+      for (const m of reminders){
+        const n = Math.max(0, Math.floor(m));
+        out.push('BEGIN:VALARM');
+        out.push(`TRIGGER:-PT${n}M`);
+        out.push('ACTION:DISPLAY');
+        out.push(`DESCRIPTION:${escapeText((e?.title||'Reminder'))}`);
+        out.push('END:VALARM');
+      }
+      return out;
+    }
+
+    function download(filename, text){
+      const blob = new Blob([text], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function renderList(){
+      const list = $('list'); list.innerHTML = '';
+      const sorted = [...events].sort((a,b)=> new Date(a.start) - new Date(b.start));
+      for (const e of sorted){
+        const div = document.createElement('div'); div.className = 'event'; div.role='listitem';
+        const left = document.createElement('div');
+        const title = document.createElement('div'); title.className='event-title'; title.textContent = e.title||'(無題)';
+        const sub = document.createElement('div'); sub.className='event-sub'; sub.textContent = `${fmt(e.start)} - ${fmt(e.end||e.start)}${e.location?` @ ${e.location}`:''}`;
+        left.appendChild(title); left.appendChild(sub);
+        const act = document.createElement('div'); act.className='event-actions';
+        const editBtn = document.createElement('button'); editBtn.className='btn'; editBtn.textContent='編集'; editBtn.onclick=()=>fillForm(e);
+        const delBtn = document.createElement('button'); delBtn.className='btn'; delBtn.textContent='削除'; delBtn.onclick=()=>{ if(confirm('削除しますか?')){ events = events.filter(x=>x.id!==e.id); saveAll(); } };
+        const icsBtn = document.createElement('button'); icsBtn.className='btn'; icsBtn.textContent='ICS'; icsBtn.onclick=()=>download(`event-${e.id}.ics`, makeIcs(e));
+        const gBtn = document.createElement('button'); gBtn.className='btn'; gBtn.textContent='Google'; gBtn.onclick=()=>openGoogle(e);
+        act.append(editBtn, delBtn, icsBtn, gBtn);
+        div.append(left, act);
+        list.appendChild(div);
+      }
+    }
+
+    function fillForm(e){
+      editingId = e?.id || null;
+      titleEl.value = e?.title || '';
+      startEl.value = e?.start ? toLocalInput(e.start) : '';
+      endEl.value = e?.end ? toLocalInput(e.end) : '';
+      locationEl.value = e?.location || '';
+      notesEl.value = e?.notes || '';
+      renderReminders(e?.reminders||[]);
+    }
+    function toLocalInput(dt){
+      const d = new Date(dt); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0,16);
+    }
+    function fromLocalInput(v){ return new Date(v); }
+
+    function renderReminders(list){
+      reminderListEl.dataset.values = JSON.stringify(list);
+      reminderListEl.textContent = list.length ? `通知: ${list.map(n=>n+'分前').join(', ')}` : '通知: なし';
+    }
+
+    function collectReminders(){ try{ return JSON.parse(reminderListEl.dataset.values||'[]'); }catch(_){ return []; } }
+
+    function save(){
+      const id = editingId || crypto.randomUUID();
+      const title = titleEl.value.trim() || '(無題)';
+      const start = startEl.value ? fromLocalInput(startEl.value) : new Date();
+      const end = endEl.value ? fromLocalInput(endEl.value) : new Date(start.getTime()+60*60*1000);
+      const location = locationEl.value.trim();
+      const notes = notesEl.value.trim();
+      const reminders = collectReminders();
+      const obj = { id, title, start:start.toISOString(), end:end.toISOString(), location, notes, reminders };
+      const idx = events.findIndex(x=>x.id===id);
+      if (idx>=0) events[idx] = obj; else events.push(obj);
+      saveAll();
+      editingId = null; clearForm();
+    }
+
+    function clearForm(){ titleEl.value=''; startEl.value=''; endEl.value=''; locationEl.value=''; notesEl.value=''; renderReminders([]); }
+
+    function openGoogle(e){
+      const enc = encodeURIComponent;
+      const s = toICSDate(e.start); const t = toICSDate(e.end||e.start);
+      const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${enc(e.title||'')}&dates=${s}%2F${t}`+
+                  (e.location?`&location=${enc(e.location)}`:'') + (e.notes?`&details=${enc(e.notes)}`:'');
+      window.open(url, '_blank', 'noopener');
+    }
+
+    function scheduleReminders(){
+      // Clear existing timers
+      if (window.__remTimers){ for (const id of window.__remTimers){ clearTimeout(id); } }
+      window.__remTimers = [];
+      const now = Date.now();
+      for (const e of events){
+        for (const m of (e.reminders||[])){
+          const at = new Date(e.start).getTime() - m*60*1000;
+          const delay = at - now;
+          if (delay > 0 && delay < 7*24*60*60*1000){ // schedule up to 7 days ahead
+            const tid = setTimeout(()=>notifyEvent(e, m), delay);
+            window.__remTimers.push(tid);
+          }
+        }
+      }
+    }
+    async function notifyEvent(e, m){
+      const body = `${m}分後に開始: ${new Date(e.start).toLocaleString()}\n${e.title}${e.location?` @ ${e.location}`:''}`;
+      try{
+        if ('Notification' in window){
+          const perm = await Notification.requestPermission();
+          if (perm === 'granted'){
+            new Notification('予定のリマインダー', { body, tag: e.id });
+          } else { alert(body); }
+        } else { alert(body); }
+      }catch(_){ alert(body); }
+    }
+
+    function addReminder(){
+      const n = parseInt(reminderEl.value||''); if (!Number.isFinite(n) || n<0) return;
+      const cur = collectReminders(); if (!cur.includes(n)){ cur.push(n); cur.sort((a,b)=>a-b); }
+      renderReminders(cur);
+      reminderEl.value = '';
+    }
+
+    function shareCurrent(){
+      const title = (titleEl.value||'');
+      const start = startEl.value; const end = endEl.value;
+      const url = new URL(location.href);
+      url.searchParams.set('title', title);
+      if (start) url.searchParams.set('start', start);
+      if (end) url.searchParams.set('end', end);
+      const shareData = { title: 'イベント共有', text: `${title}\n${start} - ${end}`, url: url.toString() };
+      if (navigator.share){ navigator.share(shareData).catch(()=>copyToClipboard(url.toString())); }
+      else { copyToClipboard(url.toString()); alert('共有URLをコピーしました'); }
+    }
+    function copyToClipboard(t){ try{ navigator.clipboard?.writeText(t); }catch(_){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } }
+
+    function exportIcs(e){ download(`event-${e.id}.ics`, makeIcs(e)); }
+    function exportAllIcs(){
+      if (!events.length) return;
+      const parts = [ 'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//CalculatorWeb//Calendar//JA','CALSCALE:GREGORIAN','METHOD:PUBLISH' ];
+      for (const e of events){
+        parts.push('BEGIN:VEVENT');
+        parts.push(`UID:${e.id}@calculatorweb`);
+        parts.push(`DTSTAMP:${toICSDate(new Date())}`);
+        parts.push(`DTSTART:${toICSDate(e.start)}`);
+        parts.push(`DTEND:${toICSDate(e.end || e.start)}`);
+        parts.push(`SUMMARY:${escapeText(e.title||'')}`);
+        if (e.location) parts.push(`LOCATION:${escapeText(e.location)}`);
+        if (e.notes) parts.push(`DESCRIPTION:${escapeText(e.notes)}`);
+        // VALARMs for reminders
+        if (Array.isArray(e.reminders) && e.reminders.length){
+          parts.push(...linesForValarms(e.reminders, e));
+        }
+        parts.push('END:VEVENT');
+      }
+      parts.push('END:VCALENDAR');
+      download('events.ics', parts.join('\r\n'));
+    }
+
+    // URL params prefill: title, start, end, location, notes, code
+    async function prefillFromQuery(){
+      const p = new URLSearchParams(location.search);
+      const code = p.get('code');
+      const title = p.get('title');
+      const start = p.get('start');
+      const end = p.get('end');
+      const locationQ = p.get('location');
+      const notes = p.get('notes');
+
+      if (code && /^\d{8}$|^\d{12}$|^\d{13}$/.test(code)){
+        try{
+          const res = await fetch('./data/products.json', { cache:'no-cache' });
+          if (res.ok){
+            const products = await res.json();
+            const prod = products.find(x=>String(x.code)===String(code));
+            if (prod){
+              titleEl.value = `${prod.name} (コード:${prod.code})`;
+              notesEl.value = (prod.description || prod.spec || '').toString();
+            }
+          }
+        }catch(_){ /* offline or missing */ }
+      }
+      if (title) titleEl.value = title;
+      if (start) startEl.value = start;
+      if (end) endEl.value = end;
+      if (locationQ) locationEl.value = locationQ;
+      if (notes) notesEl.value = notes;
+
+      // default start/end now + 1h if empty
+      if (!startEl.value){
+        const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        startEl.value = now.toISOString().slice(0,16);
+      }
+      if (!endEl.value){
+        const endD = new Date(new Date(startEl.value).getTime()+60*60*1000);
+        endD.setMinutes(endD.getMinutes() - endD.getTimezoneOffset());
+        endEl.value = endD.toISOString().slice(0,16);
+      }
+    }
+
+    // Bindings
+    $('save').addEventListener('click', save);
+    $('reset').addEventListener('click', clearForm);
+    $('addReminder').addEventListener('click', addReminder);
+    $('exportIcs').addEventListener('click', ()=>{
+      const tmp = collectFromForm(); if (!tmp) return; exportIcs(tmp);
+    });
+    $('exportAllIcs').addEventListener('click', exportAllIcs);
+    $('openGoogle').addEventListener('click', ()=>{ const tmp = collectFromForm(); if (tmp) openGoogle(tmp); });
+    $('shareBtn').addEventListener('click', shareCurrent);
+
+    function collectFromForm(){
+      const title = titleEl.value.trim(); if (!title){ alert('タイトルを入力してください'); return null; }
+      const s = startEl.value; const e = endEl.value; if (!s){ alert('開始日時を入力してください'); return null; }
+      const obj = { id: crypto.randomUUID(), title, start: fromLocalInput(s).toISOString(), end: e?fromLocalInput(e).toISOString():fromLocalInput(s).toISOString(), location: locationEl.value.trim(), notes: notesEl.value.trim(), reminders: collectReminders() };
+      return obj;
+    }
+
+    // Init
+    load();
+    prefillFromQuery();
+    scheduleReminders();
+  </script>
+</body>
+</html>
