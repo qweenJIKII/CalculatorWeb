@@ -101,10 +101,19 @@
       async function load(){
         try{
           if (!isLikelyCode && !code){ render(); return; }
-          const res = await fetch('./data/products.json', { cache:'no-store' });
-          const json = await res.json();
-          const list = json?.products || [];
-          state.product = list.find(p=> (p.code||'') === code) || null;
+          // 1) Local DB
+          try{
+            const res = await fetch('./data/products.json', { cache:'no-store' });
+            if (res.ok){
+              const json = await res.json();
+              const list = json?.products || [];
+              state.product = list.find(p=> (p.code||'') === code) || null;
+            }
+          }catch(_){ /* ignore */ }
+          // 2) Online fallback if not found locally
+          if (!state.product){
+            state.product = await fetchOnlineProduct(code);
+          }
         }catch(_){ state.product = null; }
         render();
       }
