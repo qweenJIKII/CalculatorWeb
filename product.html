@@ -9,20 +9,23 @@
   <style>
     :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; }
     html,body{height:100%}
+    *,*::before,*::after{ box-sizing: border-box; }
     body{ margin:0; background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%); color:var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif; display:flex; align-items:flex-start; justify-content:center; min-height:100dvh; padding:16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left); overflow:auto; }
-    .app{ width:min(820px,96vw); background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .app{ width:min(980px, 100%); background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:visible; margin:0 auto; }
     .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
-    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; width:100%; }
     .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; flex:0 0 auto; white-space:nowrap; }
     .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
-    .content{ padding:16px 14px 22px; display:grid; gap:14px; }
+    .content{ padding:16px 14px 22px; display:grid; gap:14px; width:100%; }
     .card{ border:1px solid rgba(255,255,255,.08); border-radius:12px; background: rgba(255,255,255,.03); padding:14px; }
     .title2{ font-weight:700; margin-bottom:8px; }
-    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%; }
     .btn{ padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color:var(--text); font-weight:700; cursor:pointer; }
     .muted{ color:var(--muted); font-size:12px; }
+    .content > *, .row > *{ min-width:0; }
     table{ width:100%; border-collapse:collapse; }
     th, td{ text-align:left; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.08); }
+    @media (max-width: 768px){ body{ padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); } .tabs{ padding: 8px 10px; } .content{ padding:12px 10px 18px; } }
   </style>
 </head>
 <body>
@@ -74,6 +77,42 @@
         <div class="title2">履歴</div>
         <div id="historyList" class="muted"></div>
       </div>
+      <div id="aiCard" class="card">
+        <div class="title2">AI説明</div>
+        <div class="row">
+          <button id="aiLocalBtn" class="btn" type="button">ローカル要約を生成</button>
+          <button id="aiLlmBtn" class="btn" type="button" title="APIキーまたはOAuthが必要（OpenAI/Gemini対応）">LLM要約を生成</button>
+          <label class="row" style="gap:6px;">
+            <span class="muted">プロバイダ:</span>
+            <select id="aiProvider" style="padding:8px 10px; border-radius:8px; background: rgba(255,255,255,.02); color:var(--text); border:1px solid rgba(255,255,255,.12);">
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </label>
+          <label class="row" style="gap:6px;">
+            <span class="muted">認証:</span>
+            <select id="aiAuth" style="padding:8px 10px; border-radius:8px; background: rgba(255,255,255,.02); color:var(--text); border:1px solid rgba(255,255,255,.12);">
+              <option value="apikey">APIキー</option>
+              <option value="oauth">OAuth 2.0</option>
+            </select>
+          </label>
+          <label id="aiKeyWrap" class="row" style="gap:6px;">
+            <span class="muted">API Key:</span>
+            <input id="aiKeyInput" type="password" placeholder="（保存しません）" style="width:240px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </label>
+          <label id="aiClientIdWrap" class="row" style="gap:6px; display:none;">
+            <span class="muted">Client ID:</span>
+            <input id="aiClientIdInput" type="text" placeholder="...apps.googleusercontent.com（保存しません）" style="width:280px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </label>
+          <div id="aiOauthWrap" class="row" style="gap:6px; display:none;">
+            <button id="aiOauthBtn" class="btn" type="button">Googleで認可</button>
+            <button id="aiSignOutBtn" class="btn" type="button" style="display:none;">ログアウト</button>
+            <span id="aiOauthState" class="muted">未認可</span>
+          </div>
+        </div>
+        <div class="muted" style="margin-top:4px;">キー/トークン/Client IDはローカルに保存しません（セッション内のみ使用）。OAuthはGemini専用・Client IDのみ使用（client_secret不要）。</div>
+        <div id="aiOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
+      </div>
       <div id="specCard" class="card" style="display:none;">
         <div class="title2">仕様</div>
         <table id="specs"></table>
@@ -93,6 +132,14 @@
       const SETTINGS_KEY = 'cw_product_settings';
       const HISTORY_KEY = 'cw_product_history_v1';
       const CACHE_KEY = 'cw_product_cache_v1';
+      // OAuth session (in-memory only)
+      const oauthSession = { accessToken: null, expiresAt: 0, clientId: null };
+      function isTokenValid(){ return !!oauthSession.accessToken && Date.now() < oauthSession.expiresAt; }
+      function setOAuthToken(token, expiresInSec){
+        oauthSession.accessToken = token || null;
+        const pad = 30; // refresh a bit earlier
+        oauthSession.expiresAt = token && expiresInSec ? (Date.now() + Math.max(0, (expiresInSec - pad))*1000) : 0;
+      }
 
       function render(){
         const p = state.product || { code: code || '-', name:'不明な製品', brand:'-', category:'-', description:'一致する製品が見つかりませんでした。', specs:{} };
@@ -232,6 +279,250 @@
         }
       }
 
+      // --- AI Summary (no key persistence) ---
+      function getProvider(){ const el = document.getElementById('aiProvider'); return (el?.value||'openai'); }
+      function getInputKey(){ const el = document.getElementById('aiKeyInput'); return (el?.value||'').trim(); }
+      function productToFacts(p){
+        if (!p) return {};
+        return {
+          code: p.code || '',
+          name: p.name || '',
+          brand: p.brand || '',
+          category: p.category || '',
+          description: p.description || '',
+          price: (typeof p.price==='number'? p.price : null),
+          currency: p.currency || '',
+          specs: p.specs || {}
+        };
+      }
+      function genLocalSummary(p){
+        const f = productToFacts(p);
+        const title = f.name || '製品';
+        const brand = f.brand ? `（${f.brand}）` : '';
+        const price = (f.price!=null) ? `${f.price}${f.currency||''}` : '価格情報なし';
+        const feats = [];
+        if (f.category) feats.push(`カテゴリ: ${f.category}`);
+        if (Array.isArray(f.specs?.ingredients) && f.specs.ingredients.length) feats.push(`原材料: ${f.specs.ingredients.slice(0,6).join('、')}${f.specs.ingredients.length>6?'…':''}`);
+        if (f.specs?.quantity) feats.push(`内容量: ${f.specs.quantity}`);
+        if (f.specs?.color) feats.push(`色: ${f.specs.color}`);
+        if (f.specs?.weight_g) feats.push(`重量: ${f.specs.weight_g}g`);
+        if (f.specs?.volume_ml) feats.push(`容量: ${f.specs.volume_ml}ml`);
+        if (f.specs?.nutriments){ const n=f.specs.nutriments; const nn=[]; if(n['energy_kcal_100g']!=null) nn.push(`エネルギー ${n['energy_kcal_100g']}kcal/100g`); if(n.proteins_100g!=null) nn.push(`たんぱく質 ${n.proteins_100g}g/100g`); if(n.fat_100g!=null) nn.push(`脂質 ${n.fat_100g}g/100g`); if(n.carbohydrates_100g!=null) nn.push(`炭水化物 ${n.carbohydrates_100g}g/100g`); if(n.sugars_100g!=null) nn.push(`糖類 ${n.sugars_100g}g/100g`); if(n.salt_100g!=null) nn.push(`食塩相当量 ${n.salt_100g}g/100g`); if(nn.length) feats.push(`栄養: ${nn.join(' / ')}`); }
+        const desc = f.description || `${title}${brand}の概要。`;
+        const lines = [
+          `【説明】${desc}`,
+          `【特徴】${feats.length? ('\n- '+feats.join('\n- ')):'情報が不足しています。'}`,
+          `【価格】${price}`
+        ];
+        return lines.join('\n');
+      }
+      async function genOpenAISummary(p, key){
+        if (!key) throw new Error('APIキーが設定されていません');
+        const f = productToFacts(p);
+        const prompt = `以下の製品データから、日本語で簡潔に説明(1-2文)、特徴(最大5項目の箇条書き)、価格(分かれば)を出力してください。不要な推測は避けてください。\n`+JSON.stringify(f);
+        const res = await fetch('https://api.openai.com/v1/chat/completions',{
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}`, 'Cache-Control':'no-store' },
+          cache:'no-store',
+          referrerPolicy:'no-referrer',
+          credentials:'omit',
+          mode:'cors',
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [ { role:'system', content:'You are a concise Japanese assistant.' }, { role:'user', content: prompt } ],
+            temperature: 0.2
+          })
+        });
+        if (!res.ok) throw new Error('LLM呼び出しに失敗しました');
+        const json = await res.json();
+        const text = json?.choices?.[0]?.message?.content || '';
+        return text.trim();
+      }
+      async function genGeminiSummary(p, key){
+        if (!key) throw new Error('APIキーが設定されていません');
+        const f = productToFacts(p);
+        const prompt = `以下の製品データから、日本語で簡潔に説明(1-2文)、特徴(最大5項目の箇条書き)、価格(分かれば)を出力してください。不要な推測は避けてください。\n`+JSON.stringify(f);
+        const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+        const res = await fetch(url, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', 'x-goog-api-key': key, 'Cache-Control':'no-store' },
+          cache:'no-store',
+          referrerPolicy:'no-referrer',
+          credentials:'omit',
+          mode:'cors',
+          body: JSON.stringify({
+            contents: [ { role:'user', parts:[ { text: prompt } ] } ],
+            generationConfig: { temperature: 0.2 }
+          })
+        });
+        if (!res.ok) throw new Error('LLM呼び出しに失敗しました');
+        const json = await res.json();
+        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        return (text||'').trim();
+      }
+      async function genGeminiSummaryOAuth(p, accessToken){
+        if (!accessToken) throw new Error('アクセストークンがありません');
+        const f = productToFacts(p);
+        const prompt = `以下の製品データから、日本語で簡潔に説明(1-2文)、特徴(最大5項目の箇条書き)、価格(分かれば)を出力してください。不要な推測は避けてください。\n`+JSON.stringify(f);
+        const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+        const res = await fetch(url, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${accessToken}`, 'Cache-Control':'no-store' },
+          cache:'no-store',
+          referrerPolicy:'no-referrer',
+          credentials:'omit',
+          mode:'cors',
+          body: JSON.stringify({
+            contents: [ { role:'user', parts:[ { text: prompt } ] } ],
+            generationConfig: { temperature: 0.2 }
+          })
+        });
+        if (!res.ok) throw new Error('LLM呼び出しに失敗しました');
+        const json = await res.json();
+        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        return (text||'').trim();
+      }
+
+      // GIS loader and token retrieval (no persistence)
+      function loadGIS(){
+        return new Promise((resolve, reject)=>{
+          if (window.google && google.accounts && google.accounts.oauth2){ resolve(); return; }
+          const s = document.createElement('script');
+          s.src = 'https://accounts.google.com/gsi/client';
+          s.async = true; s.defer = true;
+          s.onload = ()=> resolve();
+          s.onerror = ()=> reject(new Error('Google Identity Servicesの読み込みに失敗しました'));
+          document.head.appendChild(s);
+        });
+      }
+      function getGoogleAccessToken(clientId){
+        return new Promise((resolve, reject)=>{
+          try{
+            const tokenClient = google.accounts.oauth2.initTokenClient({
+              client_id: clientId,
+              scope: 'https://www.googleapis.com/auth/generative-language',
+              prompt: 'consent',
+              callback: (resp)=>{
+                if (resp && resp.access_token) resolve(resp.access_token);
+                else reject(new Error('トークン取得に失敗しました'));
+              }
+            });
+            tokenClient.requestAccessToken();
+          }catch(e){ reject(e); }
+        });
+      }
+      function getGoogleAccessTokenWithExpiry(clientId){
+        return new Promise((resolve, reject)=>{
+          try{
+            const tokenClient = google.accounts.oauth2.initTokenClient({
+              client_id: clientId,
+              scope: 'https://www.googleapis.com/auth/generative-language',
+              prompt: 'consent',
+              callback: (resp)=>{
+                if (resp && resp.access_token){ resolve({ access_token: resp.access_token, expires_in: resp.expires_in||3600 }); }
+                else reject(new Error('トークン取得に失敗しました'));
+              }
+            });
+            tokenClient.requestAccessToken();
+          }catch(e){ reject(e); }
+        });
+      }
+      async function getValidAccessToken(clientId){
+        if (isTokenValid()) return oauthSession.accessToken;
+        await loadGIS();
+        const { access_token, expires_in } = await getGoogleAccessTokenWithExpiry(clientId);
+        oauthSession.clientId = clientId;
+        setOAuthToken(access_token, expires_in);
+        updateOAuthStateUI();
+        return oauthSession.accessToken;
+      }
+      async function authorizeOAuth(){
+        const cid = (document.getElementById('aiClientIdInput')?.value||'').trim();
+        if (!cid) throw new Error('Client IDを入力してください');
+        const { access_token, expires_in } = await getGoogleAccessTokenWithExpiry(cid);
+        oauthSession.clientId = cid;
+        setOAuthToken(access_token, expires_in);
+        updateOAuthStateUI();
+      }
+      async function revokeOAuth(){
+        try{
+          await loadGIS();
+          if (oauthSession.accessToken){
+            google.accounts.oauth2.revoke(oauthSession.accessToken, ()=>{});
+          }
+        }catch(_){ /* ignore */ }
+        setOAuthToken(null, 0); oauthSession.clientId = null; updateOAuthStateUI();
+      }
+      function updateOAuthStateUI(){
+        const wrap = document.getElementById('aiOauthWrap');
+        const st = document.getElementById('aiOauthState');
+        const signOut = document.getElementById('aiSignOutBtn');
+        if (!wrap || !st || !signOut) return;
+        if (isTokenValid()){
+          const remain = Math.max(0, Math.floor((oauthSession.expiresAt - Date.now())/1000));
+          st.textContent = `認可済み（残り${remain}s）`;
+          signOut.style.display = '';
+        }else{
+          st.textContent = '未認可';
+          signOut.style.display = 'none';
+        }
+      }
+
+      function updateAIAuthUI(){
+        const provider = getProvider();
+        const auth = (document.getElementById('aiAuth')?.value)||'apikey';
+        const keyWrap = document.getElementById('aiKeyWrap');
+        const clientWrap = document.getElementById('aiClientIdWrap');
+        const oauthWrap = document.getElementById('aiOauthWrap');
+        if (provider !== 'gemini'){
+          // OpenAIはAPIキーのみ
+          if (keyWrap) keyWrap.style.display = '';
+          if (clientWrap) clientWrap.style.display = 'none';
+          if (oauthWrap) oauthWrap.style.display = 'none';
+          const sel = document.getElementById('aiAuth'); if (sel) sel.value = 'apikey';
+          return;
+        }
+        if (auth === 'oauth'){
+          if (keyWrap) keyWrap.style.display = 'none';
+          if (clientWrap) clientWrap.style.display = '';
+          if (oauthWrap) oauthWrap.style.display = '';
+          updateOAuthStateUI();
+        }else{
+          if (keyWrap) keyWrap.style.display = '';
+          if (clientWrap) clientWrap.style.display = 'none';
+          if (oauthWrap) oauthWrap.style.display = 'none';
+        }
+      }
+      async function handleLocalSummary(){ const out = document.getElementById('aiOut'); const p = state.product; out.textContent = genLocalSummary(p); }
+      async function handleLLMSummary(){
+        const out = document.getElementById('aiOut');
+        out.textContent = '生成中…';
+        try{
+          const provider = getProvider();
+          const p = state.product;
+          let txt = '';
+          if (provider === 'gemini'){
+            const authSel = document.getElementById('aiAuth');
+            const mode = authSel ? authSel.value : 'apikey';
+            if (mode === 'oauth'){
+              const cid = (document.getElementById('aiClientIdInput')?.value||'').trim();
+              if (!cid) throw new Error('Client IDを入力してください');
+              out.textContent = isTokenValid()? '生成中…' : '認可中…';
+              const token = await getValidAccessToken(cid);
+              out.textContent = '生成中…';
+              txt = await genGeminiSummaryOAuth(p, token);
+            }else{
+              const key = getInputKey();
+              txt = await genGeminiSummary(p, key);
+            }
+          }else{
+            const key = getInputKey();
+            txt = await genOpenAISummary(p, key);
+          }
+          out.textContent = txt;
+        }catch(e){ out.textContent = `エラー: ${e.message}`; }
+      }
+
       async function load(){
         try{
           if (!isLikelyCode && !code){ render(); return; }
@@ -265,11 +556,19 @@
       }
 
       $('#shareBtn').addEventListener('click', share);
+      document.getElementById('aiLocalBtn').addEventListener('click', handleLocalSummary);
+      document.getElementById('aiLlmBtn').addEventListener('click', handleLLMSummary);
+      document.getElementById('aiProvider').addEventListener('change', updateAIAuthUI);
+      document.getElementById('aiAuth').addEventListener('change', updateAIAuthUI);
+      const authBtn = document.getElementById('aiOauthBtn'); if (authBtn) authBtn.addEventListener('click', async()=>{ const out=document.getElementById('aiOut'); try{ out.textContent='認可中…'; await loadGIS(); await authorizeOAuth(); out.textContent='認可しました。'; }catch(e){ out.textContent=`エラー: ${e.message}`; } });
+      const signOutBtn = document.getElementById('aiSignOutBtn'); if (signOutBtn) signOutBtn.addEventListener('click', async()=>{ const out=document.getElementById('aiOut'); try{ await revokeOAuth(); out.textContent='ログアウトしました。'; }catch(e){ out.textContent=`エラー: ${e.message}`; } });
+      window.addEventListener('beforeunload', ()=>{ const el = document.getElementById('aiKeyInput'); if(el) el.value=''; const el2 = document.getElementById('aiClientIdInput'); if (el2) el2.value=''; });
 
       // SW best-effort
       if ('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
       renderSettings();
       renderHistory();
+      updateAIAuthUI();
       load();
     })();
   </script>
