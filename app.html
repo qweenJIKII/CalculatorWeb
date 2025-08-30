@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#171a2b" />
+  <title>ハブ | 簡易電卓</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; }
+    html,body{height:100%;}
+    *,*::before,*::after{ box-sizing: border-box; }
+    body{ margin:0; background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%); color:var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif; min-height:100dvh; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom)); }
+    .app{ width:min(1080px, 100%); margin:0 auto; background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .header{ display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .muted{ color:var(--muted); font-size:12px; }
+
+    .tabs{ display:flex; gap:8px; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); overflow:auto; -webkit-overflow-scrolling:touch; }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; white-space:nowrap; }
+    .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+
+    .content{ position:relative; height:70vh; min-height:420px; background:rgba(255,255,255,.02); }
+    .view{ position:absolute; inset:0; display:none; }
+    .view.active{ display:block; }
+    iframe{ width:100%; height:100%; border:0; background:#0b0e1a; }
+
+    .dock{ border-top:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.03); }
+    .dockHead{ display:flex; align-items:center; gap:8px; padding:8px 10px; justify-content:space-between; }
+    .dockBtns{ display:flex; gap:8px; align-items:center; }
+    .btn{ padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color:var(--text); cursor:pointer; font-size:12px; }
+    .btn.primary{ background: linear-gradient(180deg, rgba(110,168,255,.5), rgba(110,168,255,.15)); border-color: rgba(110,168,255,.6); }
+
+    .dockBody{ height:120px; }
+    .dockBody iframe{ height:100%; }
+
+    .links{ padding:8px 12px; display:flex; gap:8px; flex-wrap:wrap; }
+    .link{ color: var(--muted); text-decoration:none; border:1px dashed rgba(255,255,255,.18); border-radius:8px; padding:6px 10px; font-size:12px; }
+
+    @media (max-width: 768px){ .content{ height:60vh; min-height:360px; } .dockBody{ height:106px; } }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="ユーティリティハブ">
+    <div class="header">
+      <div class="title">簡易電卓 - ハブ</div>
+      <div class="muted">軽量機能はタブ切替／カメラ・OCR・QRは別ページ</div>
+    </div>
+
+    <nav class="tabs" aria-label="軽量機能">
+      <a class="tab" data-view="calc" href="#/calc">電卓</a>
+      <a class="tab" data-view="memo" href="#/memo">メモ</a>
+      <a class="tab" data-view="timer" href="#/timer">タイマー</a>
+      <a class="tab" data-view="convert" href="#/convert">換算</a>
+      <a class="tab" data-view="password" href="#/password">PW</a>
+      <a class="tab" data-view="voice" href="#/voice">音声</a>
+    </nav>
+
+    <section class="content" id="content">
+      <div class="view" id="view-calc"><iframe data-src="./index.html" title="電卓"></iframe></div>
+      <div class="view" id="view-memo"><iframe data-src="./memo.html" title="メモ"></iframe></div>
+      <div class="view" id="view-timer"><iframe data-src="./timer.html" title="タイマー"></iframe></div>
+      <div class="view" id="view-convert"><iframe data-src="./convert.html" title="換算"></iframe></div>
+      <div class="view" id="view-password"><iframe data-src="./password.html" title="PW"></iframe></div>
+      <div class="view" id="view-voice"><iframe allow="microphone" data-src="./voice.html" title="音声"></iframe></div>
+    </section>
+
+    <div class="links" aria-label="重量機能">
+      <a class="link" href="./camera.html">カメラ</a>
+      <a class="link" href="./ocr.html">OCR</a>
+      <a class="link" href="./qr.html">QR</a>
+    </div>
+
+    <section class="dock" aria-label="音楽ドック(常駐)">
+      <div class="dockHead">
+        <div class="muted">音楽は常時再生（ドックで維持）</div>
+        <div class="dockBtns">
+          <button id="toggleDock" class="btn">非表示</button>
+          <a class="btn" href="./music.html" target="_blank" rel="noopener">新しいタブで開く</a>
+        </div>
+      </div>
+      <div class="dockBody" id="dockBody">
+        <iframe id="musicFrame" src="./music.html" title="音楽プレイヤー"></iframe>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const tabs = Array.from(document.querySelectorAll('.tab'));
+      const views = new Map([
+        ['calc', document.getElementById('view-calc')],
+        ['memo', document.getElementById('view-memo')],
+        ['timer', document.getElementById('view-timer')],
+        ['convert', document.getElementById('view-convert')],
+        ['password', document.getElementById('view-password')],
+        ['voice', document.getElementById('view-voice')],
+      ]);
+
+      function show(view){
+        for (const [k,el] of views){ el.classList.toggle('active', k===view); if (k===view){ const ifr = el.querySelector('iframe'); if (ifr && !ifr.src){ ifr.src = ifr.dataset.src; } } }
+        tabs.forEach(a=> a.classList.toggle('active', a.dataset.view===view));
+        localStorage.setItem('hub_last_view', view);
+      }
+
+      function initialView(){
+        const h = location.hash.replace('#/','');
+        if (views.has(h)) return h;
+        return localStorage.getItem('hub_last_view') || 'calc';
+      }
+
+      window.addEventListener('hashchange', ()=>{ const v = location.hash.replace('#/',''); if (views.has(v)) show(v); });
+      show(initialView());
+
+      tabs.forEach(a=> a.addEventListener('click', (e)=>{ const v=a.dataset.view; if (!v) return; if (location.hash!==`#/${v}`) { /* keep default anchor behavior for history */ } else { e.preventDefault(); show(v); } }));
+
+      const toggleBtn = document.getElementById('toggleDock');
+      const dockBody = document.getElementById('dockBody');
+      let hidden = false;
+      toggleBtn.onclick = ()=>{ hidden = !hidden; dockBody.style.display = hidden? 'none':'block'; toggleBtn.textContent = hidden? '表示':'非表示'; };
+
+      // SW register (same as other pages)
+      if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
+    })();
+  </script>
+</body>
+</html>
