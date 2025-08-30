@@ -60,7 +60,7 @@
 
     @media (max-width: 880px){ .content{ grid-template-columns: 1fr; } #right > .row{ justify-content:flex-start !important; } #right > .row > *{ flex: 1 1 100%; } #right > .row > .panel{ min-width:0 !important; width:100% !important; } }
     @media (max-width: 480px){ .eq{ grid-template-columns: repeat(auto-fit, minmax(28px, 1fr)); } }
-    @media (max-width: 768px){ body{ padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); } .controls{ grid-template-columns: 1fr; } .tabs{ padding: 8px 10px; } .content{ padding:12px 10px 18px; } label.row{ flex:1 1 100%; } #preset, #xfadeSec, #vol{ width:100% !important; } }
+    @media (max-width: 768px){ body{ padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); } .controls{ grid-template-columns: 1fr; } .tabs{ padding: 8px 10px; } .content{ padding:12px 10px 18px; } label.row{ flex:1 1 100%; } #preset, #xfadeSec, #vol, #urlInput{ width:100% !important; } }
   </style>
 </head>
 <body>
@@ -89,8 +89,31 @@
           <button id="clearBtn" class="btn" type="button">クリア</button>
           <label class="muted">ローカル音源のみ（プライバシー保護）</label>
         </div>
+        <div class="row">
+          <input id="urlInput" type="url" inputmode="url" placeholder="https://... (.mp3/.ogg/.wav の直リンク)" style="flex:1; min-width:200px;" />
+          <button id="addUrlBtn" class="btn" type="button" title="URLをプレイリストに追加">URL追加</button>
+          <span class="muted" style="font-size:11px;">CORS対応の直リンクのみ。解析/EQはCORS必須</span>
+        </div>
         <div id="drop" class="drop" tabindex="0">ここに音楽ファイルをドラッグ＆ドロップ</div>
         <div id="playlist" class="playlist" aria-label="プレイリスト"></div>
+        <details class="muted" style="margin-top:8px;">
+          <summary>無料音源ガイド（安全・規約順守）</summary>
+          <ul style="margin:8px 0 6px 18px; padding:0; line-height:1.6;">
+            <li><a href="https://www.youtube.com/audiolibrary" target="_blank" rel="noopener">YouTube Audio Library</a>（商用可多数）</li>
+            <li><a href="https://pixabay.com/music/" target="_blank" rel="noopener">Pixabay Music</a>（商用可・クレジット不要多）</li>
+            <li><a href="https://freemusicarchive.org/" target="_blank" rel="noopener">Free Music Archive</a>（CC各種／用途確認）</li>
+            <li><a href="https://ccmixter.org/" target="_blank" rel="noopener">ccMixter</a>（CC）</li>
+            <li><a href="https://incompetech.com/music/" target="_blank" rel="noopener">Incompetech</a>（Kevin MacLeod／要クレジット）</li>
+            <li><a href="https://www.bensound.com/royalty-free-music" target="_blank" rel="noopener">Bensound</a>（無料は条件あり）</li>
+            <li><a href="https://www.jamendo.com/start" target="_blank" rel="noopener">Jamendo</a>（コミュニティ曲はCC）</li>
+            <li><a href="https://soundcloud.com/search/sounds?q=cc%20by" target="_blank" rel="noopener">SoundCloud</a>（CCフィルタで検索）</li>
+          </ul>
+          <div class="muted" style="font-size:12px;">
+            ・YouTube等からの音声抽出/ダウンロードは規約違反のため不可<br/>
+            ・URL直リンク再生はCORS対応サーバのみ推奨（可視化/EQはCORS必須）<br/>
+            ・CCライセンスの条件（BY/NC/SA等）は用途に応じて遵守してください
+          </div>
+        </details>
       </div>
 
       <!-- Right: player, eq, viz -->
@@ -163,6 +186,7 @@
       eq: document.getElementById('eq'), preset: document.getElementById('preset'),
       xfadeEn: document.getElementById('xfadeEn'), xfadeSec: document.getElementById('xfadeSec'),
       viz: document.getElementById('viz'),
+      url: document.getElementById('urlInput'), addUrl: document.getElementById('addUrlBtn'),
     };
 
     // --- State
@@ -243,6 +267,13 @@
       }
       renderList(); if (list.length===files.length) loadIndex(0);
     }
+    function isAudioUrl(u){ return /\.(mp3|ogg|wav)(\?.*)?$/i.test(u); }
+    function urlName(u){ try{ const {pathname, host} = new URL(u); const base = pathname.split('/').pop() || host; return decodeURIComponent(base); }catch(_){ return u; } }
+    function addUrl(u){
+      if (!isAudioUrl(u)) { alert('音源の直リンク(.mp3/.ogg/.wav)のみ対応します。'); return; }
+      list.push({ name: urlName(u), url: u });
+      renderList(); if (idx<0) loadIndex(0);
+    }
     function renderList(){
       el.list.innerHTML = '';
       list.forEach((t, i)=>{
@@ -297,6 +328,8 @@
     // --- Wire UI
     el.picker.onchange = ()=>{ if (el.picker.files?.length) addFiles(el.picker.files); };
     el.clear.onclick = ()=>{ [a0,a1].forEach(a=>{ try{ a.pause(); }catch(_){ } }); list.splice(0); idx=-1; el.list.innerHTML=''; el.seek.value='0'; el.curT.textContent='0:00'; el.durT.textContent='0:00'; };
+    el.addUrl.onclick = ()=>{ const u = (el.url.value||'').trim(); if (u) { addUrl(u); } };
+    el.url?.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); el.addUrl.click(); } });
 
     // DnD
     function onDropFiles(e){
