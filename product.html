@@ -172,14 +172,36 @@
       // --- Online fetchers (fallback) ---
       function normalizeFromOFF(prod, barcode){
         if (!prod) return null;
-        const name = prod.product_name || prod.generic_name || prod.product_name_en || '';
+        // Prefer Japanese fields when available
+        const name = prod.product_name_ja || prod.generic_name_ja || prod.product_name || prod.generic_name || prod.product_name_en || '';
         const brand = (prod.brands || '').split(',')[0]?.trim() || '';
         const category = (prod.categories || '').split(',')[0]?.trim() || '';
-        const description = prod.generic_name || prod.ingredients_text || prod.labels || '';
+        const description = prod.generic_name_ja || prod.generic_name || prod.labels || prod.packaging_text || '';
         const nutr = prod.nutriments || {};
         const specs = {};
+        // Common fields
         if (prod.quantity) specs.quantity = prod.quantity;
+        if (prod.packaging) specs.packaging = prod.packaging;
+        if (prod.model) specs.model = prod.model;
+        if (prod.color) specs.color = prod.color;
+        if (Array.isArray(prod.color_tags) && prod.color_tags.length) specs.color_tags = prod.color_tags;
         if (prod.ingredients_text) specs.ingredients = prod.ingredients_text.split(/,\s*/).filter(Boolean);
+        // Try to infer weight/volume from quantity string (e.g., "500 g", "1.5 L")
+        try{
+          const q = (prod.quantity||'').toString().toLowerCase();
+          const m = q.match(/([0-9]+(?:\.[0-9]+)?)\s*(kg|g|l|ml)/i);
+          if (m){
+            const val = parseFloat(m[1]);
+            const unit = (m[2]||'').toLowerCase();
+            if (!Number.isNaN(val)){
+              if (unit==='kg') specs.weight_g = Math.round(val*1000);
+              else if (unit==='g') specs.weight_g = Math.round(val);
+              else if (unit==='l') specs.volume_ml = Math.round(val*1000);
+              else if (unit==='ml') specs.volume_ml = Math.round(val);
+            }
+          }
+        }catch(_){/* ignore */}
+        // Nutriments (mainly for foods/beverages)
         const take = (k)=> (k in nutr) ? nutr[k] : undefined;
         const nutro = {
           energy_kcal_100g: take('energy-kcal_100g'),
@@ -191,8 +213,30 @@
         };
         const nutroKeys = Object.keys(nutro).filter(k=> nutro[k] !== undefined);
         if (nutroKeys.length) specs.nutriments = nutro;
+        // Tags for reference
         if (Array.isArray(prod.brands_tags) && prod.brands_tags.length) specs.brands_tags = prod.brands_tags;
         if (Array.isArray(prod.categories_tags) && prod.categories_tags.length) specs.categories_tags = prod.categories_tags;
+        // Heuristics for electronics/game consoles
+        const catStr = (prod.categories||'').toLowerCase();
+        const labelsStr = (prod.labels||'').toLowerCase();
+        const platforms = [
+          { k:['nintendo switch','switch','nintendo'], v:'Nintendo Switch' },
+          { k:['playstation 5','ps5'], v:'PlayStation 5' },
+          { k:['playstation 4','ps4'], v:'PlayStation 4' },
+          { k:['playstation 3','ps3'], v:'PlayStation 3' },
+          { k:['xbox series x','xbox series s','xbox series'], v:'Xbox Series' },
+          { k:['xbox one'], v:'Xbox One' }
+        ];
+        for (const p of platforms){ if (p.k.some(t=> catStr.includes(t))) { specs.platform = p.v; break; } }
+        if (!specs.platform){ if (/xbox/.test(catStr)) specs.platform = 'Xbox'; }
+        // Device type
+        if (/television|tv|oled|lcd/.test(catStr)) specs.device_type = 'Television';
+        else if (/camera|digital camera|dslr|mirrorless/.test(catStr)) specs.device_type = 'Camera';
+        else if (/vacuum|cleaner|robot vacuum/.test(catStr)) specs.device_type = 'Vacuum Cleaner';
+        else if (/refrigerator|fridge/.test(catStr)) specs.device_type = 'Refrigerator';
+        else if (/washing machine|washer/.test(catStr)) specs.device_type = 'Washing Machine';
+        else if (/air conditioner|ac/.test(catStr)) specs.device_type = 'Air Conditioner';
+        else if (/game console|console/.test(catStr)) specs.device_type = 'Game Console';
         return {
           code: barcode,
           name: name || '(名称不明)',
@@ -215,11 +259,48 @@
         }catch(_){ return null; }
       }
 
+      // Wikidata fallback (free, CORS OK via query.wikidata.org)
+      async function fetchFromWikidata(barcode){
+        try{
+          const code = String(barcode||'').replace(/[^0-9Xx]/g,'');
+          if (!code) return null;
+          const isIsbn13 = code.length===13 && /^(978|979)/.test(code);
+          const q = `SELECT ?item ?itemLabel ?itemDescription ?manufacturerLabel ?instanceLabel WHERE {\n`+
+                    `  { ?item wdt:P3962 "${code}". }\n`+
+                    (isIsbn13 ? `  UNION { ?item wdt:P212 "${code}". }\n` : '')+
+                    `  OPTIONAL { ?item wdt:P176 ?manufacturer. }\n`+
+                    `  OPTIONAL { ?item wdt:P31 ?instance. }\n`+
+                    `  SERVICE wikibase:label { bd:serviceParam wikibase:language \"ja,en\". }\n`+
+                    `} LIMIT 1`;
+          const url = 'https://query.wikidata.org/sparql?format=json&query='+encodeURIComponent(q);
+          const res = await fetch(url, { headers: { 'Accept':'application/sparql-results+json' }, cache:'no-store' });
+          if (!res.ok) return null;
+          const json = await res.json();
+          const b = json?.results?.bindings?.[0];
+          if (!b) return null;
+          const val = (k)=> (b[k]?.value)||'';
+          const name = val('itemLabel');
+          const brand = val('manufacturerLabel');
+          const category = val('instanceLabel');
+          const description = val('itemDescription');
+          const specs = { source: 'wikidata' };
+          if (val('item')) specs.wikidata_item = val('item');
+          return {
+            code: barcode,
+            name: name || '(名称不明)',
+            brand: brand || '-',
+            category: category || '-',
+            description: description || '',
+            specs
+          };
+        }catch(_){ return null; }
+      }
+
       async function fetchOnlineProduct(barcode){
-        // Try multiple Open * Facts families to cover more product types
+        // Try multiple Open * Facts families to cover more product types (prioritize non-food for electronics)
         const hosts = [
+          'world.openproductfacts.org',
           'world.openfoodfacts.org',
-          'world.openproductsfacts.org',
           'world.openbeautyfacts.org',
           'world.openpetfoodfacts.org'
         ];
@@ -227,6 +308,9 @@
           const r = await fetchFromOFFHost(h, barcode);
           if (r) return r;
         }
+        // Wikidata fallback (GTIN / ISBN-13)
+        const wd = await fetchFromWikidata(barcode);
+        if (wd) return wd;
         return null;
       }
 
