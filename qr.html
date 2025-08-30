@@ -67,6 +67,7 @@
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
       <a class="tab" href="./voice.html">音声</a>
+      <a class="tab" href="./music.html">音楽</a>
     </nav>
 
     <section class="content">
@@ -79,6 +80,7 @@
             <option value="convert">換算</option>
             <option value="password">PW</option>
             <option value="voice">音声</option>
+            <option value="music">音楽</option>
             <option value="ocr">OCR</option>
             <option value="here">現在のページ</option>
           </select>
@@ -216,6 +218,7 @@
         if (kind==='convert') return base('./convert.html');
         if (kind==='password') return base('./password.html');
         if (kind==='voice') return base('./voice.html');
+        if (kind==='music') return base('./music.html');
         if (kind==='ocr') return base('./camera.html#ocr');
         if (kind==='here') return location.href;
         return base('./');

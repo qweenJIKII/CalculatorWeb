@@ -77,6 +77,7 @@
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
       <a class="tab" href="./voice.html">音声</a>
+      <a class="tab" href="./music.html">音楽</a>
     </nav>
 
     <section class="content">
@@ -99,6 +100,7 @@
               <option value="convert">換算</option>
               <option value="password">PW</option>
               <option value="voice">音声</option>
+              <option value="music">音楽</option>
               <option value="ocr">OCR</option>
               <option value="here">現在のページ</option>
             </select>
@@ -374,12 +376,13 @@
       input?.addEventListener('keydown', (e)=>{ if (e.key==='Enter') update(); });
       copyBtn?.addEventListener('click', async ()=>{ try { await navigator.clipboard.writeText(input.value); } catch(_){} });
       shareBtn?.addEventListener('click', async ()=>{ const data = { title:'簡易電卓', text: input.value, url: input.value }; if (navigator.share){ try{ await navigator.share(data); return; }catch(_){} } try{ await navigator.clipboard.writeText(input.value); }catch(_){} });
-      function presetUrl(kind){ const base=(p)=> new URL(p, location.href).href; if (kind==='app') return base('./'); if (kind==='memo') return base('./memo.html'); if (kind==='timer') return base('./timer.html'); if (kind==='convert') return base('./convert.html'); if (kind==='password') return base('./password.html'); if (kind==='voice') return base('./voice.html'); if (kind==='ocr') return base('./camera.html#ocr'); if (kind==='here') return location.href; return base('./'); }
+      function presetUrl(kind){ const base=(p)=> new URL(p, location.href).href; if (kind==='app') return base('./'); if (kind==='memo') return base('./memo.html'); if (kind==='timer') return base('./timer.html'); if (kind==='convert') return base('./convert.html'); if (kind==='password') return base('./password.html'); if (kind==='voice') return base('./voice.html'); if (kind==='music') return base('./music.html'); if (kind==='ocr') return base('./camera.html#ocr'); if (kind==='here') return location.href; return base('./'); }
       function applyPreset(){ if (!input || !presetSel) return; input.value = presetUrl(presetSel.value); update(); }
       applyPresetBtn?.addEventListener('click', applyPreset);
 
       // ===== QR Scanner (from qr.html, simplified for camera page) =====
       const scanStart = document.getElementById('scanStart');
+      // ...
       const scanStop = document.getElementById('scanStop');
       const scanOut = document.getElementById('scanOut');
       const scanCopy = document.getElementById('scanCopy');

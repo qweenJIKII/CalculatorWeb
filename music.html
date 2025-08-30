@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#171a2b" />
+  <title>音楽プレイヤー | 簡易電卓</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    :root { --bg:#0f1222; --panel:#171a2b; --panel-2:#1f2340; --text:#e9ecf1; --muted:#a8b0c2; --accent:#6ea8ff; --ok:#4ade80; --danger:#ff6b6b; }
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 10% 0%, #13173a 0%, var(--bg) 50%, #0b0e1a 100%);
+      color:var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+      display:flex; align-items:flex-start; justify-content:center;
+      min-height:100dvh; padding: 16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+    }
+    .app{ width:min(980px, 96vw); background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); overflow:hidden; }
+    .header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .tabs{ display:flex; gap:10px; padding: 8px 14px; border-bottom:1px solid rgba(255,255,255,.06); background: rgba(255,255,255,0.02); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+    .tab{ color: var(--muted); text-decoration: none; padding:6px 10px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background: rgba(255,255,255,.02); font-size:13px; flex:0 0 auto; white-space:nowrap; }
+    .tab.active{ color:var(--text); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .content{ padding:16px 14px 22px; display:grid; gap:14px; grid-template-columns: 1.2fr 1fr; }
+
+    .panel{ border:1px solid rgba(255,255,255,.08); border-radius:12px; background:rgba(255,255,255,.03); padding:12px; }
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .btn{ padding:8px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color:var(--text); cursor:pointer; }
+    .btn.primary{ background: linear-gradient(180deg, rgba(110,168,255,.5), rgba(110,168,255,.15)); border-color: rgba(110,168,255,.6); }
+    input[type="range"]{ accent-color: var(--accent); }
+    .muted{ color:var(--muted); font-size:12px; }
+
+    .drop{ border:1px dashed rgba(255,255,255,.25); border-radius:12px; padding:16px; text-align:center; background:rgba(255,255,255,.02); }
+    .drop.drag{ background:rgba(110,168,255,.08); border-color:#6ea8ff; }
+
+    .playlist{ max-height: 320px; overflow:auto; display:grid; gap:6px; }
+    .track{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border-radius:10px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); cursor:pointer; }
+    .track.active{ outline: 2px solid var(--accent); }
+
+    .controls{ display:grid; grid-template-columns: auto 1fr; gap:10px; align-items:center; }
+    .seek{ display:flex; gap:8px; align-items:center; }
+    .eq{ display:grid; grid-template-columns: repeat(10, 1fr); gap:8px; align-items:end; }
+    .eq input{ width:100%; writing-mode: bt-lr; appearance: slider-vertical; -webkit-appearance: slider-vertical; height:140px; }
+    .eq label{ text-align:center; font-size:11px; color:var(--muted); }
+
+    .canvasWrap{ border:1px solid rgba(255,255,255,.08); border-radius:10px; overflow:hidden; }
+
+    @media (max-width: 880px){ .content{ grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="音楽プレイヤー">
+    <div class="header">
+      <div class="title">簡易電卓 - 音楽プレイヤー</div>
+      <div class="muted">ローカル音源で高音質再生</div>
+    </div>
+    <nav class="tabs" aria-label="ナビゲーション">
+      <a class="tab" href="./">電卓</a>
+      <a class="tab" href="./help.html">説明</a>
+      <a class="tab" href="./memo.html">メモ</a>
+      <a class="tab" href="./camera.html">カメラ</a>
+      <a class="tab" href="./timer.html">タイマー</a>
+      <a class="tab" href="./convert.html">換算</a>
+      <a class="tab" href="./password.html">PW</a>
+      <a class="tab" href="./voice.html">音声</a>
+      <a class="tab active" href="./music.html">音楽</a>
+    </nav>
+
+    <section class="content">
+      <!-- Left: playlist and drop -->
+      <div class="panel" id="left">
+        <div class="row">
+          <input id="filePicker" type="file" accept="audio/*" multiple />
+          <button id="clearBtn" class="btn" type="button">クリア</button>
+          <label class="muted">ローカル音源のみ（プライバシー保護）</label>
+        </div>
+        <div id="drop" class="drop" tabindex="0">ここに音楽ファイルをドラッグ＆ドロップ</div>
+        <div id="playlist" class="playlist" aria-label="プレイリスト"></div>
+      </div>
+
+      <!-- Right: player, eq, viz -->
+      <div class="panel" id="right">
+        <div class="controls">
+          <div class="row">
+            <button id="prevBtn" class="btn" title="前へ">⏮</button>
+            <button id="playBtn" class="btn primary" title="再生/一時停止">⏯</button>
+            <button id="nextBtn" class="btn" title="次へ">⏭</button>
+            <label class="row" style="margin-left:8px;">
+              音量 <input id="vol" type="range" min="0" max="1" step="0.01" style="width:120px;">
+            </label>
+            <label class="row"><input id="mute" type="checkbox"> ミュート</label>
+            <label class="row"><input id="loop" type="checkbox"> ループ</label>
+            <label class="row"><input id="shuffle" type="checkbox"> シャッフル</label>
+          </div>
+          <div class="seek">
+            <span id="curT" class="muted" style="width:56px; text-align:right;">0:00</span>
+            <input id="seek" type="range" min="0" max="1000" step="1" style="flex:1;">
+            <span id="durT" class="muted" style="width:56px;">0:00</span>
+          </div>
+        </div>
+
+        <div class="row" style="justify-content:space-between; align-items:flex-end;">
+          <div class="row" style="gap:12px; align-items:flex-end;">
+            <div>
+              <div class="muted">イコライザ</div>
+              <div class="eq" id="eq"></div>
+            </div>
+          </div>
+          <div class="panel" style="min-width:260px;">
+            <div class="row" style="justify-content:space-between;">
+              <label class="row">プリセット
+                <select id="preset">
+                  <option value="flat">Flat</option>
+                  <option value="pop">Pop</option>
+                  <option value="rock">Rock</option>
+                  <option value="jazz">Jazz</option>
+                  <option value="classical">Classical</option>
+                </select>
+              </label>
+            </div>
+            <div class="row" style="margin-top:6px;">
+              <label class="row"><input id="xfadeEn" type="checkbox"> クロスフェード</label>
+              <label class="row">秒 <input id="xfadeSec" type="range" min="1" max="8" step="1" style="width:120px;"></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="canvasWrap" style="margin-top:12px;">
+          <canvas id="viz" width="800" height="160"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+  (function(){
+    // --- Elements
+    const el = {
+      picker: document.getElementById('filePicker'),
+      clear: document.getElementById('clearBtn'),
+      drop: document.getElementById('drop'),
+      list: document.getElementById('playlist'),
+      prev: document.getElementById('prevBtn'),
+      play: document.getElementById('playBtn'),
+      next: document.getElementById('nextBtn'),
+      vol: document.getElementById('vol'), mute: document.getElementById('mute'), loop: document.getElementById('loop'), shuffle: document.getElementById('shuffle'),
+      seek: document.getElementById('seek'), curT: document.getElementById('curT'), durT: document.getElementById('durT'),
+      eq: document.getElementById('eq'), preset: document.getElementById('preset'),
+      xfadeEn: document.getElementById('xfadeEn'), xfadeSec: document.getElementById('xfadeSec'),
+      viz: document.getElementById('viz'),
+    };
+
+    // --- State
+    const S = {
+      vol: +(localStorage.getItem('music_vol')||0.9),
+      mute: localStorage.getItem('music_mute')==='1',
+      loop: localStorage.getItem('music_loop')==='1',
+      shuffle: localStorage.getItem('music_shuffle')==='1',
+      xfadeEn: localStorage.getItem('music_xfade_en')==='1',
+      xfadeSec: +(localStorage.getItem('music_xfade_sec')||3),
+      preset: localStorage.getItem('music_preset')||'flat',
+      eq: JSON.parse(localStorage.getItem('music_eq')||'null'),
+    };
+
+    // --- Audio and WebAudio Graph (dual elements for crossfade)
+    const AC = window.AudioContext || window.webkitAudioContext; let ac;
+    function ensureAC(){ if (!ac) ac = new AC(); return ac; }
+
+    // two HTMLAudioElements
+    const a0 = new Audio(); a0.preload = 'metadata';
+    const a1 = new Audio(); a1.preload = 'metadata';
+    let cur = 0; // index of active element (0/1)
+
+    // create graph for each element
+    const freqs = [31,62,125,250,500,1000,2000,4000,8000,16000];
+    function createGraph(audioEl){
+      const ctx = ensureAC();
+      const src = ctx.createMediaElementSource(audioEl);
+      const filters = freqs.map((f)=>{
+        const bi = ctx.createBiquadFilter();
+        bi.type = 'peaking'; bi.frequency.value = f; bi.Q.value = 0.9; bi.gain.value = 0;
+        return bi;
+      });
+      // chain filters
+      filters.reduce((p,c)=>{ p.connect(c); return c; }, src);
+      const gain = ctx.createGain(); gain.gain.value = S.vol; filters[filters.length-1].connect(gain);
+      const analyser = ctx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.85; gain.connect(analyser);
+      gain.connect(ctx.destination);
+      return { src, filters, gain, analyser };
+    }
+    const g0 = createGraph(a0); const g1 = createGraph(a1);
+
+    // --- EQ UI build
+    const sliders = [];
+    for (let i=0;i<freqs.length;i++){
+      const wrap = document.createElement('div');
+      const inp = document.createElement('input'); inp.type='range'; inp.min='-12'; inp.max='12'; inp.step='1'; inp.value='0'; inp.dataset.i=String(i);
+      const lab = document.createElement('label'); lab.textContent = freqs[i] + (freqs[i]<1000?'Hz':'Hz');
+      wrap.appendChild(inp); wrap.appendChild(lab); el.eq.appendChild(wrap); sliders.push(inp);
+    }
+
+    function applyEqValues(values){
+      for(let i=0;i<freqs.length;i++){
+        const v = values[i]||0; g0.filters[i].gain.value = v; g1.filters[i].gain.value = v; sliders[i].value = String(v);
+      }
+    }
+    const PRESETS = {
+      flat: [0,0,0,0,0,0,0,0,0,0],
+      pop: [-1,2,4,5,3,0,2,3,2,0],
+      rock: [3,2,1,0,-1,0,2,3,4,5],
+      jazz: [0,2,3,2,1,0,1,2,3,2],
+      classical: [2,1,0,-1,-2,-1,0,1,2,3],
+    };
+
+    // --- Helpers
+    function fmt(t){ t=t|0; const m=(t/60)|0; const s=(t%60)|0; return m+":"+('0'+s).slice(-2); }
+    function activeGraph(){ return (cur===0)? g0 : g1; }
+    function inactiveGraph(){ return (cur===0)? g1 : g0; }
+    function activeEl(){ return (cur===0)? a0 : a1; }
+    function inactiveEl(){ return (cur===0)? a1 : a0; }
+
+    // --- Playlist
+    const list = [];
+    function addFiles(files){
+      for (const f of files){
+        if (!f.type.startsWith('audio/')) continue;
+        list.push({ name: f.name, url: URL.createObjectURL(f) });
+      }
+      renderList(); if (list.length===files.length) loadIndex(0);
+    }
+    function renderList(){
+      el.list.innerHTML = '';
+      list.forEach((t, i)=>{
+        const div = document.createElement('div'); div.className='track';
+        div.innerHTML = `<span class="muted" style="flex:1;">${i+1}. ${t.name}</span><span class="muted">${t.dur||''}</span>`;
+        if (i===idx) div.classList.add('active');
+        div.onclick = ()=>{ playIndex(i, true); };
+        el.list.appendChild(div);
+      });
+    }
+
+    let idx = -1; // current track index
+    function loadIndex(i){
+      if (i<0 || i>=list.length) return;
+      idx = i;
+      const elTo = inactiveEl(); const gTo = inactiveGraph();
+      elTo.src = list[i].url; elTo.loop = S.loop; elTo.crossOrigin = 'anonymous';
+      elTo.onloadedmetadata = ()=>{
+        list[i].dur = fmt(elTo.duration|0); renderList(); el.durT.textContent = list[i].dur || '0:00';
+        el.seek.max = Math.max(1, (elTo.duration*1000)|0);
+      };
+      elTo.onended = ()=>{ if (!S.loop) next(); };
+    }
+
+    function playIndex(i, force=false){
+      if (i!==idx) loadIndex(i);
+      if (list.length===0) return;
+      const from = activeEl(); const to = inactiveEl(); const gFrom = activeGraph(); const gTo = inactiveGraph();
+      const doStart = ()=>{
+        try{ to.currentTime = 0; }catch(_){ }
+        to.play().catch(()=>{});
+      };
+      if (S.xfadeEn){
+        const sec = Math.max(1, Math.min(8, S.xfadeSec));
+        const ctx = ensureAC(); const now = ctx.currentTime;
+        gTo.gain.gain.setValueAtTime(0.0001, now);
+        doStart();
+        gTo.gain.gain.cancelScheduledValues(now); gTo.gain.gain.linearRampToValueAtTime(S.mute?0:S.vol, now + sec);
+        gFrom.gain.gain.cancelScheduledValues(now); gFrom.gain.gain.linearRampToValueAtTime(0.0001, now + sec);
+        setTimeout(()=>{ try{ from.pause(); from.currentTime=0; }catch(_){ } cur = (cur^1); }, sec*1000+50);
+      } else {
+        try{ from.pause(); from.currentTime=0; }catch(_){ }
+        gTo.gain.gain.value = S.mute?0:S.vol;
+        doStart(); cur = (cur^1);
+      }
+      renderList();
+    }
+
+    function prev(){ if (list.length===0) return; let i = idx - 1; if (i<0) i = list.length-1; playIndex(i, true); }
+    function next(){ if (list.length===0) return; let i = idx + 1; if (S.shuffle){ i = (Math.random()*list.length)|0; } if (i>=list.length) i = 0; playIndex(i, true); }
+
+    // --- Wire UI
+    el.picker.onchange = ()=>{ if (el.picker.files?.length) addFiles(el.picker.files); };
+    el.clear.onclick = ()=>{ [a0,a1].forEach(a=>{ try{ a.pause(); }catch(_){ } }); list.splice(0); idx=-1; el.list.innerHTML=''; el.seek.value='0'; el.curT.textContent='0:00'; el.durT.textContent='0:00'; };
+
+    // DnD
+    function onDropFiles(e){
+      e.preventDefault(); e.stopPropagation(); el.drop.classList.remove('drag');
+      const files = e.dataTransfer?.files; if (files?.length) addFiles(files);
+    }
+    ;['dragenter','dragover'].forEach(t=> el.drop.addEventListener(t, (e)=>{ e.preventDefault(); el.drop.classList.add('drag'); }));
+    ;['dragleave','drop'].forEach(t=> el.drop.addEventListener(t, (e)=>{ if (t!=='drop') el.drop.classList.remove('drag'); }));
+    el.drop.addEventListener('drop', onDropFiles);
+
+    el.prev.onclick = ()=> prev();
+    el.next.onclick = ()=> next();
+    el.play.onclick = ()=>{
+      if (list.length===0) return;
+      const a = activeEl();
+      // If no track has been loaded to the active element yet, start current index (or 0)
+      if (idx < 0 || !a.src || !isFinite(a.duration)) { playIndex(idx>=0?idx:0, true); return; }
+      if (a.paused){ ensureAC(); a.play().catch(()=>{ playIndex(idx>=0?idx:0, true); }); } else { a.pause(); }
+    };
+
+    // Volume/mute
+    el.vol.value = String(S.vol); el.mute.checked = S.mute; el.loop.checked = S.loop; el.shuffle.checked = S.shuffle; el.xfadeEn.checked = S.xfadeEn; el.xfadeSec.value = String(S.xfadeSec);
+    function applyVol(){ const v = S.mute?0:S.vol; g0.gain.gain.value = v; g1.gain.gain.value = v; }
+    applyVol();
+    el.vol.oninput = ()=>{ S.vol = +el.vol.value; localStorage.setItem('music_vol', String(S.vol)); applyVol(); };
+    el.mute.onchange = ()=>{ S.mute = !!el.mute.checked; localStorage.setItem('music_mute', S.mute?'1':'0'); applyVol(); };
+    el.loop.onchange = ()=>{ S.loop = !!el.loop.checked; localStorage.setItem('music_loop', S.loop?'1':'0'); a0.loop = a1.loop = S.loop; };
+    el.shuffle.onchange = ()=>{ S.shuffle = !!el.shuffle.checked; localStorage.setItem('music_shuffle', S.shuffle?'1':'0'); };
+
+    // Seek
+    function updateSeek(){ const a = activeEl(); if (!isFinite(a.duration)) return; el.seek.max = String((a.duration*1000)|0); el.seek.value = String((a.currentTime*1000)|0); el.curT.textContent = fmt(a.currentTime|0); el.durT.textContent = fmt((a.duration||0)|0); }
+    ;[a0,a1].forEach(a=> a.ontimeupdate = updateSeek);
+    el.seek.oninput = ()=>{ const a = activeEl(); try{ a.currentTime = (+el.seek.value)/1000; }catch(_){ } };
+
+    // EQ wiring
+    function applyPreset(name){ const vals = PRESETS[name] || PRESETS.flat; S.preset=name; localStorage.setItem('music_preset', name); applyEqValues(vals); localStorage.setItem('music_eq', JSON.stringify(vals)); }
+    if (Array.isArray(S.eq) && S.eq.length===freqs.length){ applyEqValues(S.eq); el.preset.value = S.preset; } else { applyPreset(S.preset); }
+    el.preset.onchange = ()=> applyPreset(el.preset.value);
+    sliders.forEach(inp=> inp.addEventListener('input', ()=>{
+      const i = (+inp.dataset.i)|0; const v = (+inp.value)|0; g0.filters[i].gain.value = v; g1.filters[i].gain.value = v;
+      const cur = sliders.map(s=> (+s.value)|0); localStorage.setItem('music_eq', JSON.stringify(cur)); el.preset.value = 'flat'; localStorage.setItem('music_preset', 'flat');
+    }));
+
+    // Crossfade
+    el.xfadeEn.onchange = ()=>{ S.xfadeEn = !!el.xfadeEn.checked; localStorage.setItem('music_xfade_en', S.xfadeEn?'1':'0'); };
+    el.xfadeSec.oninput = ()=>{ S.xfadeSec = (+el.xfadeSec.value)|0; localStorage.setItem('music_xfade_sec', String(S.xfadeSec)); };
+
+    // Visualization
+    const ctx2d = el.viz.getContext('2d');
+    function draw(){
+      const an = activeGraph().analyser; const N = an.frequencyBinCount; const arr = new Uint8Array(N); an.getByteFrequencyData(arr);
+      ctx2d.fillStyle = '#0b0e1a'; ctx2d.fillRect(0,0,el.viz.width, el.viz.height);
+      const w = el.viz.width, h = el.viz.height; const bars = 64; const step = (N/bars)|0; const bw = (w/bars)-2;
+      for (let i=0;i<bars;i++){
+        let v=0; for (let j=0;j<step;j++) v+=arr[i*step+j]; v/=step;
+        const bh = (v/255)*h; ctx2d.fillStyle = '#6ea8ff'; ctx2d.fillRect(i*(bw+2), h-bh, bw, bh);
+      }
+      requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
+
+    // SW register
+    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
+
+  })();
+  </script>
+</body>
+</html>

@@ -49,6 +49,18 @@
     [data-mode="pomodoro"] #kitchenBox{ display:none; }
     [data-mode="kitchen"] #pomodoroBox, [data-mode="kitchen"] #pomodoroBox2, [data-mode="kitchen"] #cycle, [data-mode="kitchen"] #sessions{ display:none; }
 
+    /* sound modal */
+    .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; }
+    .modal{ position:fixed; inset:auto 0 0 0; margin:auto; top:10vh; width:min(560px, 92vw); background:var(--panel-2); border:1px solid rgba(255,255,255,.12); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.45); display:none; }
+    .modal .hd{ padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.08); font-weight:700; }
+    .modal .bd{ padding:14px; display:grid; gap:12px; }
+    .modal .ft{ padding:12px 14px; border-top:1px solid rgba(255,255,255,.08); display:flex; justify-content:flex-end; gap:8px; }
+    .modal label{ display:flex; align-items:center; gap:8px; }
+    .modal input[type="range"]{ width:180px; }
+    .btn{ padding:8px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color:var(--text); cursor:pointer; }
+    .btn.primary{ background: linear-gradient(180deg, rgba(110,168,255,.5), rgba(110,168,255,.15)); border-color: rgba(110,168,255,.6); }
+    .muted{ color:var(--muted); font-size:12px; }
+
     @media (max-width: 720px){ .app{ width:100vw; min-height:100svh; border-radius:0; } .display{ font-size:48px; } }
   </style>
 </head>
@@ -67,6 +79,7 @@
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
       <a class="tab" href="./voice.html">音声</a>
+      <a class="tab" href="./music.html">音楽</a>
     </nav>
 
     <section class="content">
@@ -88,6 +101,7 @@
         <button id="pauseBtn">一時停止</button>
         <button id="resetBtn">リセット</button>
         <button id="nextBtn">次へ</button>
+        <button id="soundBtn" title="通知音の設定">音設定</button>
       </div>
       <div id="pomodoroBox2" class="settings">
         <label>作業(分) <input id="workMin" type="number" min="1" step="1"></label>
@@ -115,6 +129,41 @@
     </section>
   </main>
 
+  <!-- Sound Settings Modal -->
+  <div id="sndBackdrop" class="modal-backdrop" role="presentation"></div>
+  <div id="sndModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="sndTitle" aria-hidden="true">
+    <div class="hd"><span id="sndTitle">通知音の設定</span></div>
+    <div class="bd">
+      <fieldset>
+        <legend class="muted">種類</legend>
+        <div style="display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+          <label><input type="radio" name="sndKind" value="beep"> ビープ</label>
+          <label><input type="radio" name="sndKind" value="bell"> ベル</label>
+          <label><input type="radio" name="sndKind" value="digital"> デジタル</label>
+          <label><input type="radio" name="sndKind" value="gentle"> ソフト</label>
+          <label><input type="radio" name="sndKind" value="alarm"> アラーム</label>
+          <label><input type="radio" name="sndKind" value="custom"> カスタム</label>
+        </div>
+      </fieldset>
+      <div id="customRow" style="display:none;">
+        <label>ファイル<input id="sndFile" type="file" accept="audio/*"></label>
+        <div class="muted">カスタム音はこのページを閉じるまで有効です。</div>
+      </div>
+      <div>
+        <label>音量 <input id="sndVol" type="range" min="0" max="1" step="0.01"></label>
+        <label><input id="sndLoop" type="checkbox"> 繰り返し</label>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="sndTest" class="btn" type="button">テスト再生</button>
+        <button id="sndStop" class="btn" type="button">停止</button>
+      </div>
+    </div>
+    <div class="ft">
+      <button id="sndClose" class="btn" type="button">閉じる</button>
+      <button id="sndSave" class="btn primary" type="button">保存</button>
+    </div>
+  </div>
+
   <script>
     (function(){
       const S = {
@@ -133,6 +182,7 @@
         pause: document.getElementById('pauseBtn'),
         reset: document.getElementById('resetBtn'),
         next: document.getElementById('nextBtn'),
+        soundBtn: document.getElementById('soundBtn'),
         work: document.getElementById('workMin'),
         short: document.getElementById('shortMin'),
         long: document.getElementById('longMin'),
@@ -147,6 +197,18 @@
         kSec: document.getElementById('kSec'),
         kPresets: document.getElementById('kPresets'),
         kApply: document.getElementById('kApply'),
+        // modal
+        sndBackdrop: document.getElementById('sndBackdrop'),
+        sndModal: document.getElementById('sndModal'),
+        sndKind: document.querySelectorAll('input[name="sndKind"]'),
+        sndFile: document.getElementById('sndFile'),
+        sndVol: document.getElementById('sndVol'),
+        sndLoop: document.getElementById('sndLoop'),
+        sndTest: document.getElementById('sndTest'),
+        sndStop: document.getElementById('sndStop'),
+        sndSave: document.getElementById('sndSave'),
+        sndClose: document.getElementById('sndClose'),
+        customRow: document.getElementById('customRow'),
       };
       el.work.value = S.work; el.short.value = S.short; el.long.value = S.long; el.rounds.value = S.rounds;
       el.kMin.value = K.min; el.kSec.value = K.sec;
@@ -200,6 +262,110 @@
         }catch(_){ }
       }
 
+      // === Sound Settings ===
+      const SOUND = {
+        id: localStorage.getItem('timer_sound_id') || 'beep',
+        volume: +(localStorage.getItem('timer_sound_volume')||0.7),
+        loop: localStorage.getItem('timer_sound_loop') === '1'
+      };
+      let ac=null, master=null, alarmTimer=null, customAudio=null;
+      function ensureAC(){
+        const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return null;
+        if (!ac) { ac = new AC(); master = ac.createGain(); master.gain.value = SOUND.volume; master.connect(ac.destination); }
+        return ac;
+      }
+      function setVolume(v){ SOUND.volume = v; if (master) master.gain.value = v; }
+      function stopAlarm(){
+        try{ if (alarmTimer){ clearInterval(alarmTimer); alarmTimer=null; } }catch(_){ }
+        try{ if (customAudio){ customAudio.pause(); customAudio.currentTime=0; } }catch(_){ }
+        // Note: Oscillator nodes are one-shot; intervals cover repetition
+      }
+      function playPresetOnce(kind){
+        const ctx = ensureAC(); if (!ctx) { beep(); return; }
+        const g = ctx.createGain(); g.gain.value = SOUND.volume; g.connect(master);
+        const o1 = ctx.createOscillator(); o1.connect(g);
+        const now = ctx.currentTime;
+        if (kind==='beep'){
+          o1.type='sine'; o1.frequency.setValueAtTime(880, now);
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(SOUND.volume, now+0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, now+0.35);
+          o1.start(now); o1.stop(now+0.4);
+        } else if (kind==='bell'){
+          o1.type='sine'; o1.frequency.setValueAtTime(1320, now);
+          const o2 = ctx.createOscillator(); o2.type='sine'; o2.frequency.setValueAtTime(990, now); const g2 = ctx.createGain(); g2.gain.value = SOUND.volume*0.5; o2.connect(g2); g2.connect(master); o2.start(now); o2.stop(now+1.2);
+          g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(SOUND.volume*0.9, now+0.01); g.gain.exponentialRampToValueAtTime(0.0001, now+1.2);
+          o1.start(now); o1.stop(now+1.2);
+        } else if (kind==='digital'){
+          o1.type='square'; o1.frequency.setValueAtTime(1000, now);
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(SOUND.volume, now+0.005);
+          g.gain.setValueAtTime(SOUND.volume, now+0.12);
+          g.gain.exponentialRampToValueAtTime(0.0001, now+0.15);
+          o1.start(now); o1.stop(now+0.16);
+        } else if (kind==='gentle'){
+          o1.type='triangle'; o1.frequency.setValueAtTime(440, now);
+          g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(SOUND.volume*0.6, now+0.08); g.gain.exponentialRampToValueAtTime(0.0001, now+0.8);
+          o1.start(now); o1.stop(now+0.9);
+        } else { // alarm pattern short burst
+          o1.type='sawtooth'; o1.frequency.setValueAtTime(880, now);
+          g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(SOUND.volume, now+0.01); g.gain.setValueAtTime(SOUND.volume, now+0.2); g.gain.exponentialRampToValueAtTime(0.0001, now+0.25);
+          o1.start(now); o1.stop(now+0.26);
+        }
+      }
+      function startAlarm(){
+        stopAlarm();
+        if (SOUND.id==='custom' && customAudio){
+          try{ customAudio.loop = !!SOUND.loop; customAudio.volume = SOUND.volume; customAudio.currentTime=0; customAudio.play().catch(()=>{}); }catch(_){ }
+          return;
+        }
+        // play preset once or loop
+        playPresetOnce(SOUND.id);
+        if (SOUND.loop){ alarmTimer = setInterval(()=> playPresetOnce(SOUND.id), 800); }
+      }
+
+      // Modal wiring
+      function openSnd(){
+        // reflect current
+        el.sndKind.forEach(r=> r.checked = (r.value===SOUND.id));
+        el.sndVol.value = String(SOUND.volume);
+        el.sndLoop.checked = !!SOUND.loop;
+        el.customRow.style.display = (SOUND.id==='custom') ? '' : 'none';
+        el.sndBackdrop.style.display = 'block';
+        el.sndModal.style.display = 'block';
+        el.sndModal.setAttribute('aria-hidden','false');
+      }
+      function closeSnd(){
+        el.sndBackdrop.style.display = 'none';
+        el.sndModal.style.display = 'none';
+        el.sndModal.setAttribute('aria-hidden','true');
+      }
+      el.soundBtn.onclick = ()=> openSnd();
+      el.sndBackdrop.onclick = ()=> closeSnd();
+      el.sndClose.onclick = ()=> closeSnd();
+      el.sndKind.forEach(r=> r.addEventListener('change', ()=>{ if (r.checked){ el.customRow.style.display = (r.value==='custom')?'':'none'; }}));
+      el.sndVol.oninput = ()=> setVolume(+el.sndVol.value);
+      el.sndLoop.onchange = ()=> { SOUND.loop = !!el.sndLoop.checked; };
+      el.sndTest.onclick = ()=> { ensureAC(); startAlarm(); if (!SOUND.loop){ setTimeout(()=> stopAlarm(), 1500); } };
+      el.sndStop.onclick = ()=> stopAlarm();
+      el.sndSave.onclick = ()=>{
+        // apply selected kind
+        const sel = Array.from(el.sndKind).find(r=>r.checked)?.value || 'beep';
+        SOUND.id = sel; SOUND.loop = !!el.sndLoop.checked; setVolume(+el.sndVol.value);
+        localStorage.setItem('timer_sound_id', SOUND.id);
+        localStorage.setItem('timer_sound_volume', String(SOUND.volume));
+        localStorage.setItem('timer_sound_loop', SOUND.loop?'1':'0');
+        closeSnd();
+      };
+      el.sndFile.onchange = ()=>{
+        try{
+          const f = el.sndFile.files?.[0]; if (!f) return;
+          if (customAudio){ try{ customAudio.pause(); }catch(_){} }
+          customAudio = new Audio(); customAudio.src = URL.createObjectURL(f); customAudio.preload='auto';
+          SOUND.id = 'custom'; el.sndKind.forEach(r=> r.checked = (r.value==='custom'));
+        }catch(_){ }
+      };
+
       function updateProgress(remain){ if (!totalMs) { el.bar.style.width = '0%'; return; } const done = Math.max(0, Math.min(1, 1 - (remain/totalMs))); el.bar.style.width = (done*100).toFixed(1) + '%'; }
 
       function setPhase(p){
@@ -232,6 +398,8 @@
           } else {
             notify('時間です');
           }
+          // play selected alarm
+          try{ startAlarm(); }catch(_){ }
         }
       }
 
@@ -239,6 +407,7 @@
       function pause(){ if (!timer) return; clearInterval(timer); timer=null; }
       function reset(){
         pause();
+        stopAlarm();
         if (mode==='pomodoro'){
           count=0; renderSessions(); setPhase('work'); el.disp.textContent = mmss(S.work*60*1000); updateProgress(0);
           el.next.style.display=''; el.cycle.style.display=''; el.sessions.style.display='';
