@@ -109,8 +109,12 @@
             <button id="aiSignOutBtn" class="btn" type="button" style="display:none;">ログアウト</button>
             <span id="aiOauthState" class="muted">未認可</span>
           </div>
+          <label id="aiRememberWrap" class="row" style="gap:6px;">
+            <input id="aiRememberToggle" type="checkbox" />
+            <span class="muted">この端末に保存（APIキー/Client ID）</span>
+          </label>
         </div>
-        <div class="muted" style="margin-top:4px;">キー/トークン/Client IDはローカルに保存しません（セッション内のみ使用）。OAuthはGemini専用・Client IDのみ使用（client_secret不要）。</div>
+        <div class="muted" style="margin-top:4px;">キー/トークン/Client IDは原則保存しません（保存にチェック時のみ端末に保存・トークンは保存しません）。OAuthはGemini専用・Client IDのみ使用（client_secret不要）。</div>
         <div id="aiOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
       </div>
       <div id="specCard" class="card" style="display:none;">
@@ -132,6 +136,8 @@
       const SETTINGS_KEY = 'cw_product_settings';
       const HISTORY_KEY = 'cw_product_history_v1';
       const CACHE_KEY = 'cw_product_cache_v1';
+      // Optional local persistence (opt-in)
+      const AI_STORE = { remember: 'cw_ai_remember', apiKey: 'cw_ai_api_key', clientId: 'cw_ai_client_id' };
       // OAuth session (in-memory only)
       const oauthSession = { accessToken: null, expiresAt: 0, clientId: null };
       function isTokenValid(){ return !!oauthSession.accessToken && Date.now() < oauthSession.expiresAt; }
@@ -277,6 +283,36 @@
           a.style.display='block'; a.style.color='var(--text)'; a.style.textDecoration='none'; a.style.margin='4px 0';
           wrap.appendChild(a);
         }
+      }
+      // Persistence helpers (API Key / Client ID only)
+      function applyStoredAIInputs(){
+        try{
+          const remember = localStorage.getItem(AI_STORE.remember) === '1';
+          const rememberEl = document.getElementById('aiRememberToggle'); if (rememberEl) rememberEl.checked = remember;
+          if (!remember) return;
+          const keyEl = document.getElementById('aiKeyInput');
+          const cidEl = document.getElementById('aiClientIdInput');
+          const k = localStorage.getItem(AI_STORE.apiKey) || '';
+          const c = localStorage.getItem(AI_STORE.clientId) || '';
+          if (keyEl) keyEl.value = k;
+          if (cidEl) cidEl.value = c;
+        }catch(_){/* ignore */}
+      }
+      function persistAIInputsIfNeeded(){
+        try{
+          const remember = !!(document.getElementById('aiRememberToggle')?.checked);
+          const keyEl = document.getElementById('aiKeyInput');
+          const cidEl = document.getElementById('aiClientIdInput');
+          if (remember){
+            localStorage.setItem(AI_STORE.remember, '1');
+            if (keyEl) localStorage.setItem(AI_STORE.apiKey, keyEl.value||'');
+            if (cidEl) localStorage.setItem(AI_STORE.clientId, cidEl.value||'');
+          }else{
+            localStorage.removeItem(AI_STORE.remember);
+            localStorage.removeItem(AI_STORE.apiKey);
+            localStorage.removeItem(AI_STORE.clientId);
+          }
+        }catch(_){/* ignore */}
       }
 
       // --- AI Summary (no key persistence) ---
@@ -562,12 +598,22 @@
       document.getElementById('aiAuth').addEventListener('change', updateAIAuthUI);
       const authBtn = document.getElementById('aiOauthBtn'); if (authBtn) authBtn.addEventListener('click', async()=>{ const out=document.getElementById('aiOut'); try{ out.textContent='認可中…'; await loadGIS(); await authorizeOAuth(); out.textContent='認可しました。'; }catch(e){ out.textContent=`エラー: ${e.message}`; } });
       const signOutBtn = document.getElementById('aiSignOutBtn'); if (signOutBtn) signOutBtn.addEventListener('click', async()=>{ const out=document.getElementById('aiOut'); try{ await revokeOAuth(); out.textContent='ログアウトしました。'; }catch(e){ out.textContent=`エラー: ${e.message}`; } });
-      window.addEventListener('beforeunload', ()=>{ const el = document.getElementById('aiKeyInput'); if(el) el.value=''; const el2 = document.getElementById('aiClientIdInput'); if (el2) el2.value=''; });
+      const rememberTgl = document.getElementById('aiRememberToggle'); if (rememberTgl) rememberTgl.addEventListener('change', persistAIInputsIfNeeded);
+      const keyEl = document.getElementById('aiKeyInput'); if (keyEl) keyEl.addEventListener('input', ()=>{ persistAIInputsIfNeeded(); });
+      const cidEl = document.getElementById('aiClientIdInput'); if (cidEl) cidEl.addEventListener('input', ()=>{ persistAIInputsIfNeeded(); });
+      window.addEventListener('beforeunload', ()=>{
+        const remember = !!(document.getElementById('aiRememberToggle')?.checked);
+        if (!remember){
+          const el = document.getElementById('aiKeyInput'); if(el) el.value='';
+          const el2 = document.getElementById('aiClientIdInput'); if (el2) el2.value='';
+        }
+      });
 
       // SW best-effort
       if ('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
       renderSettings();
       renderHistory();
+      applyStoredAIInputs();
       updateAIAuthUI();
       load();
     })();
