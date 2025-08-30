@@ -42,6 +42,21 @@
     .event-sub{ color:var(--muted); font-size:12px; }
     .event-actions{ display:flex; gap:8px; }
 
+    /* Month grid calendar */
+    .cal-header{ display:flex; align-items:center; gap:10px; justify-content:space-between; margin-bottom:8px; }
+    .cal-title{ font-weight:700; }
+    .cal-ctrls{ display:flex; gap:8px; }
+    .cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+    .cal-cell{ border:1px solid rgba(255,255,255,.08); border-radius:10px; background: rgba(255,255,255,.02); min-height:72px; padding:6px; display:flex; flex-direction:column; gap:4px; }
+    .cal-dow{ text-align:center; font-size:12px; color:var(--muted); padding:4px 0; font-weight:700; }
+    .cal-day{ font-size:12px; color:var(--text); opacity:.9; }
+    .cal-out{ opacity:.4; }
+    .cal-today{ outline: 2px solid var(--accent); background: rgba(110,168,255,.12); }
+    .cal-today .cal-day{ font-weight:700; color: var(--accent); }
+    .cal-evts{ display:flex; flex-wrap:wrap; gap:4px; }
+    .cal-dot{ width:8px; height:8px; border-radius:999px; background:#6ea8ff; display:inline-block; }
+    .cal-evt{ font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+
     @media (max-width: 720px){ .app{ width:100vw; min-height:100dvh; border-radius:0; } }
   </style>
 </head>
@@ -68,6 +83,21 @@
 
     <section class="content">
       <div class="grid">
+        <section class="card" aria-labelledby="monthTitle">
+          <div id="monthTitle" class="event-title">カレンダー（月）</div>
+          <div class="cal-header">
+            <div class="cal-title" id="calLabel">&nbsp;</div>
+            <div class="cal-ctrls">
+              <button id="calPrev" class="btn" type="button" title="前の月">◀</button>
+              <button id="calToday" class="btn" type="button" title="今月">今日</button>
+              <button id="calNext" class="btn" type="button" title="次の月">▶</button>
+            </div>
+          </div>
+          <div class="cal-grid" role="grid" aria-label="月間カレンダー">
+            <div class="cal-dow">日</div><div class="cal-dow">月</div><div class="cal-dow">火</div><div class="cal-dow">水</div><div class="cal-dow">木</div><div class="cal-dow">金</div><div class="cal-dow">土</div>
+            <div id="calGrid" style="display:contents"></div>
+          </div>
+        </section>
         <section class="card" aria-labelledby="formTitle">
           <div id="formTitle" class="event-title">イベント作成 / 編集</div>
           <div class="row">
@@ -134,8 +164,9 @@
     function load(){
       try{ events = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')||[]; }catch(_){ events=[]; }
       renderList();
+      renderCal();
     }
-    function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(events)); renderList(); scheduleReminders(); }
+    function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(events)); renderList(); scheduleReminders(); renderCal(); }
 
     function fmt(dt){
       try{ const d=new Date(dt); return `${d.toLocaleString()}`; }catch(_){ return dt||''; }
@@ -213,6 +244,14 @@
       }
     }
 
+    // Month navigation controls
+    const calPrevEl = document.getElementById('calPrev');
+    const calNextEl = document.getElementById('calNext');
+    const calTodayEl = document.getElementById('calToday');
+    calPrevEl?.addEventListener('click', ()=>{ calMonth--; if (calMonth<0){ calMonth=11; calYear--; } renderCal(); });
+    calNextEl?.addEventListener('click', ()=>{ calMonth++; if (calMonth>11){ calMonth=0; calYear++; } renderCal(); });
+    calTodayEl?.addEventListener('click', ()=>{ const now=new Date(); calYear=now.getFullYear(); calMonth=now.getMonth(); renderCal(); });
+
     function fillForm(e){
       editingId = e?.id || null;
       titleEl.value = e?.title || '';
@@ -234,6 +273,70 @@
     }
 
     function collectReminders(){ try{ return JSON.parse(reminderListEl.dataset.values||'[]'); }catch(_){ return []; } }
+
+    // --- Month calendar rendering ---
+    const calLabelEl = document.getElementById('calLabel');
+    const calGridEl = document.getElementById('calGrid');
+    let calYear = (new Date()).getFullYear();
+    let calMonth = (new Date()).getMonth(); // 0-11
+
+    function ymd(d){ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+    function labelYM(y,m){ return `${y}年${m+1}月`; }
+    function beginOfCalendar(y,m){ const d=new Date(y,m,1); const wd=d.getDay(); d.setDate(d.getDate()-wd); return d; }
+    function endOfCalendar(y,m){ const d=new Date(y,m+1,0); const wd=d.getDay(); d.setDate(d.getDate()+(6-wd)); return d; }
+    function toLocalInputValue(d){ const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,16); }
+
+    function eventsByDateMap(){
+      const map = new Map();
+      for(const e of events){
+        const dt = new Date(e.start);
+        const key = ymd(dt);
+        if(!map.has(key)) map.set(key, []);
+        map.get(key).push(e);
+      }
+      return map;
+    }
+    function renderCal(){
+      if (!calGridEl || !calLabelEl) return;
+      calLabelEl.textContent = labelYM(calYear, calMonth);
+      calGridEl.innerHTML = '';
+      const start = beginOfCalendar(calYear, calMonth);
+      const end = endOfCalendar(calYear, calMonth);
+      const todayKey = ymd(new Date());
+      const map = eventsByDateMap();
+      const curMonth = calMonth;
+      for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
+        const cell = document.createElement('div'); cell.className='cal-cell'; cell.role='gridcell'; cell.tabIndex=0;
+        const k = ymd(d);
+        const head = document.createElement('div'); head.className='cal-day'; head.textContent= String(d.getDate());
+        if (d.getMonth()!==curMonth) head.classList.add('cal-out');
+        if (k===todayKey) cell.classList.add('cal-today');
+        const evWrap = document.createElement('div'); evWrap.className='cal-evts';
+        const items = map.get(k)||[];
+        if (items.length){
+          // show up to 2 labels, rest as dots
+          const maxLabels = 2;
+          for(let i=0; i<Math.min(items.length, maxLabels); i++){
+            const sp = document.createElement('div'); sp.className='cal-evt'; sp.textContent = (items[i].title||''); evWrap.appendChild(sp);
+          }
+          if (items.length>maxLabels){
+            const more = document.createElement('div'); more.className='cal-evt'; more.textContent = `+${items.length-maxLabels}`; evWrap.appendChild(more);
+          }
+        }
+        cell.appendChild(head); cell.appendChild(evWrap);
+        cell.addEventListener('click', ()=>{
+          // Fill form with selected date (09:00 - 10:00)
+          const s = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0, 0);
+          const e = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 10, 0, 0);
+          startEl.value = toLocalInputValue(s);
+          endEl.value = toLocalInputValue(e);
+          if (!titleEl.value) titleEl.value = `${d.getMonth()+1}/${d.getDate()} の予定`;
+          // focus title for quick typing
+          titleEl.focus();
+        });
+        calGridEl.appendChild(cell);
+      }
+    }
 
     function save(){
       const id = editingId || crypto.randomUUID();
