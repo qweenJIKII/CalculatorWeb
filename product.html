@@ -117,6 +117,25 @@
         <div class="muted" style="margin-top:4px;">キー/トークン/Client IDは原則保存しません（保存にチェック時のみ端末に保存・トークンは保存しません）。OAuthはGemini専用・Client IDのみ使用（client_secret不要）。</div>
         <div id="aiOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
       </div>
+      <div id="cseCard" class="card">
+        <div class="title2">対応機種（Googleカスタム検索）</div>
+        <div class="row">
+          <label class="row" style="gap:6px;">
+            <span class="muted">API Key:</span>
+            <input id="cseKeyInput" type="password" placeholder="（保存しません）" style="width:240px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </label>
+          <label class="row" style="gap:6px;">
+            <span class="muted">CX (Search Engine ID):</span>
+            <input id="cseCxInput" type="text" placeholder="xxxxxxxxxxxxxxxxx:yyyyyyyyyyy（保存しません）" style="width:280px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </label>
+          <button id="cseBtn" class="btn" type="button" title="JANとキーワードで検索">対応機種を取得</button>
+          <label class="row" style="gap:6px;">
+            <input id="cseRememberToggle" type="checkbox" />
+            <span class="muted">この端末に保存（APIキー/CX）</span>
+          </label>
+        </div>
+        <div id="cseOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
+      </div>
       <div id="specCard" class="card" style="display:none;">
         <div class="title2">仕様</div>
         <table id="specs"></table>
@@ -138,6 +157,7 @@
       const CACHE_KEY = 'cw_product_cache_v1';
       // Optional local persistence (opt-in)
       const AI_STORE = { remember: 'cw_ai_remember', apiKey: 'cw_ai_api_key', clientId: 'cw_ai_client_id' };
+      const CSE_STORE = { remember: 'cw_cse_remember', apiKey: 'cw_cse_api_key', cx: 'cw_cse_cx' };
       // OAuth session (in-memory only)
       const oauthSession = { accessToken: null, expiresAt: 0, clientId: null };
       function isTokenValid(){ return !!oauthSession.accessToken && Date.now() < oauthSession.expiresAt; }
@@ -399,6 +419,37 @@
         }catch(_){/* ignore */}
       }
 
+      // CSE (Custom Search) persistence (API Key / CX only)
+      function applyStoredCSEInputs(){
+        try{
+          const remember = localStorage.getItem(CSE_STORE.remember) === '1';
+          const rememberEl = document.getElementById('cseRememberToggle'); if (rememberEl) rememberEl.checked = remember;
+          if (!remember) return;
+          const keyEl = document.getElementById('cseKeyInput');
+          const cxEl = document.getElementById('cseCxInput');
+          const k = localStorage.getItem(CSE_STORE.apiKey) || '';
+          const c = localStorage.getItem(CSE_STORE.cx) || '';
+          if (keyEl) keyEl.value = k;
+          if (cxEl) cxEl.value = c;
+        }catch(_){/* ignore */}
+      }
+      function persistCSEInputsIfNeeded(){
+        try{
+          const remember = !!(document.getElementById('cseRememberToggle')?.checked);
+          const keyEl = document.getElementById('cseKeyInput');
+          const cxEl = document.getElementById('cseCxInput');
+          if (remember){
+            localStorage.setItem(CSE_STORE.remember, '1');
+            if (keyEl) localStorage.setItem(CSE_STORE.apiKey, keyEl.value||'');
+            if (cxEl) localStorage.setItem(CSE_STORE.cx, cxEl.value||'');
+          }else{
+            localStorage.removeItem(CSE_STORE.remember);
+            localStorage.removeItem(CSE_STORE.apiKey);
+            localStorage.removeItem(CSE_STORE.cx);
+          }
+        }catch(_){/* ignore */}
+      }
+
       // --- AI Summary (no key persistence) ---
       function getProvider(){ const el = document.getElementById('aiProvider'); return (el?.value||'openai'); }
       function getInputKey(){ const el = document.getElementById('aiKeyInput'); return (el?.value||'').trim(); }
@@ -613,6 +664,65 @@
           if (oauthWrap) oauthWrap.style.display = 'none';
         }
       }
+
+      // --- Supported devices via Google Custom Search ---
+      function extractDevicesFromText(text){
+        try{
+          const t = (text||'').replace(/\s+/g,' ').trim();
+          const out = new Set();
+          // 1) After "対応機種" keyword, take following chunk
+          const m = t.match(/対応機種[:：]?\s*([^。\n\r]|。(?!\s*素材|\s*セット|\s*内容|\s*材質))+/);
+          if (m && m[0]){
+            const seg = m[0].replace(/^対応機種[:：]?\s*/,'');
+            for (const token of seg.split(/[、,・/／\n\r\t]|\s{2,}/)){
+              const v = token.trim();
+              if (!v) continue;
+              if (v.length<2 || v.length>40) continue;
+              // basic allowlist of brand keywords
+              if (/(iPhone|Xperia|Galaxy|Pixel|AQUOS|arrows|OPPO|Reno|HUAWEI|Xiaomi|Redmi|ZenFone|Nothing|Moto|XPERIA|GALAXY|iPad)/i.test(v)) out.add(v);
+            }
+          }
+          // 2) Generic model patterns (window around keywords)
+          const kw = ['iPhone','Xperia','Galaxy','Pixel','AQUOS','arrows','OPPO','Reno','HUAWEI','Xiaomi','Redmi','ZenFone','Nothing','Moto','iPad'];
+          for (const k of kw){
+            // Allow a short window of characters after the keyword (ASCII + Japanese + digits + signs + spaces)
+            const r = new RegExp(k+"[\\x00-\\x7F\\u3000-\\u30FF\\u4E00-\\u9FAF0-9\\-\\+\\s]{0,30}", 'gi');
+            const arr = t.match(r) || [];
+            for (let s of arr){
+              s = s.replace(/\s+/g,' ').trim();
+              if (s.length>=3 && s.length<=40) out.add(s);
+            }
+          }
+          return Array.from(out);
+        }catch(_){ return []; }
+      }
+      async function searchSupportedDevicesByJAN(jan, key, cx){
+        if (!jan) throw new Error('JANコードがありません');
+        if (!key) throw new Error('APIキーを入力してください');
+        if (!cx) throw new Error('CX(Search Engine ID)を入力してください');
+        const q = `${jan} 対応機種`;
+        const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&num=8&lr=lang_ja`;
+        const res = await fetch(url, { cache:'no-store' });
+        if (!res.ok){
+          let msg = `検索失敗 (${res.status})`;
+          try{ const j = await res.json(); if (j?.error?.message) msg = j.error.message; }catch(_){/* ignore */}
+          throw new Error(msg);
+        }
+        const json = await res.json();
+        const items = json?.items || [];
+        const found = new Set();
+        for (const it of items){
+          const texts = [it.title||'', it.snippet||''];
+          const mt = it.pagemap?.metatags || [];
+          for (const tag of mt){
+            if (typeof tag['og:description']==='string') texts.push(tag['og:description']);
+            if (typeof tag['description']==='string') texts.push(tag['description']);
+          }
+          const cand = extractDevicesFromText(texts.join(' \n '));
+          for (const c of cand){ found.add(c); }
+        }
+        return Array.from(found);
+      }
       async function handleLocalSummary(){ const out = document.getElementById('aiOut'); const p = state.product; out.textContent = genLocalSummary(p); }
       async function handleLLMSummary(){
         const out = document.getElementById('aiOut');
@@ -685,11 +795,32 @@
       const rememberTgl = document.getElementById('aiRememberToggle'); if (rememberTgl) rememberTgl.addEventListener('change', persistAIInputsIfNeeded);
       const keyEl = document.getElementById('aiKeyInput'); if (keyEl) keyEl.addEventListener('input', ()=>{ persistAIInputsIfNeeded(); });
       const cidEl = document.getElementById('aiClientIdInput'); if (cidEl) cidEl.addEventListener('input', ()=>{ persistAIInputsIfNeeded(); });
+      // CSE handlers
+      const cseBtn = document.getElementById('cseBtn'); if (cseBtn) cseBtn.addEventListener('click', async()=>{
+        const out = document.getElementById('cseOut');
+        out.textContent = '検索中…';
+        try{
+          const jan = (state.product?.code || code || '').trim();
+          const key = (document.getElementById('cseKeyInput')?.value||'').trim();
+          const cx = (document.getElementById('cseCxInput')?.value||'').trim();
+          const list = await searchSupportedDevicesByJAN(jan, key, cx);
+          if (!list.length){ out.textContent = '対応機種は見つかりませんでした。'; }
+          else { out.textContent = '対応機種:\n- ' + list.slice(0,50).join('\n- '); }
+        }catch(e){ out.textContent = `エラー: ${e.message}`; }
+      });
+      const cseRememberTgl = document.getElementById('cseRememberToggle'); if (cseRememberTgl) cseRememberTgl.addEventListener('change', persistCSEInputsIfNeeded);
+      const cseKeyEl = document.getElementById('cseKeyInput'); if (cseKeyEl) cseKeyEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
+      const cseCxEl = document.getElementById('cseCxInput'); if (cseCxEl) cseCxEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
       window.addEventListener('beforeunload', ()=>{
         const remember = !!(document.getElementById('aiRememberToggle')?.checked);
         if (!remember){
           const el = document.getElementById('aiKeyInput'); if(el) el.value='';
           const el2 = document.getElementById('aiClientIdInput'); if (el2) el2.value='';
+        }
+        const rememberCSE = !!(document.getElementById('cseRememberToggle')?.checked);
+        if (!rememberCSE){
+          const k = document.getElementById('cseKeyInput'); if (k) k.value='';
+          const c = document.getElementById('cseCxInput'); if (c) c.value='';
         }
       });
 
@@ -698,6 +829,7 @@
       renderSettings();
       renderHistory();
       applyStoredAIInputs();
+      applyStoredCSEInputs();
       updateAIAuthUI();
       load();
     })();
