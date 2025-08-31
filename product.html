@@ -39,13 +39,13 @@
       <a class="tab" href="./help.html">説明</a>
       <a class="tab" href="./memo.html">メモ</a>
       <a class="tab" href="./camera.html">カメラ</a>
+      <a class="tab active" href="./product.html">製品</a>
       <a class="tab" href="./qr.html">QR</a>
       <a class="tab" href="./timer.html">タイマー</a>
       <a class="tab" href="./convert.html">換算</a>
       <a class="tab" href="./password.html">PW</a>
       <a class="tab" href="./voice.html">音声</a>
       <a class="tab" href="./music.html">音楽</a>
-      <a class="tab active" href="./product.html">製品</a>
       <a class="tab" href="./calendar.html">カレンダー</a>
     </nav>
 
@@ -58,6 +58,7 @@
           </div>
           <div class="row">
             <button id="shareBtn" class="btn">共有</button>
+            <span id="vaultBadge" style="display:none; margin-left:8px; padding:2px 6px; font-size:12px; border-radius:10px; background:#7c4dff; color:#fff;">Vault補完適用</span>
           </div>
         </div>
         <p id="desc" style="margin:10px 0 0;">説明</p>
@@ -130,6 +131,14 @@
           <input id="saveHistoryToggle" type="checkbox" />
           <span class="muted">読み込み結果を履歴に保存</span>
         </label>
+        <label class="row" style="gap:8px;">
+          <input id="vaultEnableToggle" type="checkbox" />
+          <span class="muted">Vault補完を使用</span>
+        </label>
+        <label class="row" style="gap:8px;">
+          <input id="vaultPreferToggle" type="checkbox" />
+          <span class="muted">Vaultを優先（既存情報よりVaultの値を優先）</span>
+        </label>
       </div>
       <div id="historyCard" class="card" style="display:none;">
         <div class="title2">履歴</div>
@@ -144,7 +153,7 @@
             <span class="muted">プロバイダ:</span>
             <select id="aiProvider" style="padding:8px 10px; border-radius:8px; background: rgba(255,255,255,.02); color:var(--text); border:1px solid rgba(255,255,255,.12);">
               <option value="openai">OpenAI</option>
-              <option value="gemini">Gemini</option>
+              <option value="gemini" selected>Gemini</option>
             </select>
           </label>
           <label class="row" style="gap:6px;">
@@ -198,9 +207,14 @@
             <span class="muted">この端末に保存（APIキー/Model）</span>
           </label>
         </div>
+        <div class="muted" style="margin-top:4px; font-size:12px;">
+          注: <code>:free</code> モデルは OpenRouter 設定「Free model publication」有効が必要です。
+          <a href="https://openrouter.ai/settings/privacy" target="_blank" rel="noopener">設定を確認</a>
+        </div>
         <div class="row" style="gap:6px; margin-top:6px;">
           <input id="dsQuery" type="text" placeholder="製品に関する質問を入力（事実ベースで回答）" style="flex:1; min-width:280px;" autocomplete="off" />
           <button id="dsSendBtn" class="btn" type="button">送信</button>
+          <button id="dsStopBtn" class="btn btn-secondary" type="button" title="ストリーミングを停止">停止</button>
         </div>
         <div class="row" style="gap:12px; align-items:center; margin-top:6px;">
           <label class="row" style="gap:6px; align-items:center;">
@@ -208,41 +222,33 @@
             <span class="muted">reasoning表示</span>
           </label>
           <label class="row" style="gap:6px; align-items:center;">
+            <input id="dsGeneralInfoToggle" type="checkbox" />
+            <span class="muted">一般情報の補足を許可</span>
+          </label>
+          <label class="row" style="gap:6px; align-items:center;">
             <input id="dsProxyOnlyToggle" type="checkbox" />
             <span class="muted">プロキシのみ使用</span>
           </label>
+          <button id="dsCopyBtn" class="btn btn-secondary" type="button">コピー</button>
           <button id="dsClearBtn" class="btn btn-secondary" type="button">ログクリア</button>
         </div>
         <div id="dsChat" class="muted" style="margin-top:8px; white-space:pre-wrap; border:1px solid #ddd; border-radius:6px; padding:8px; min-height:60px;"></div>
         <div class="muted" style="margin-top:6px; font-size:12px;">Powered by <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a> / DeepSeek</div>
       </div>
-      <div id="cseCard" class="card">
-        <div class="title2">対応機種（Googleカスタム検索）</div>
-        <div class="row">
-          <label class="row" style="gap:6px;">
-            <span class="muted">API Key:</span>
-            <input id="cseKeyInput" type="password" placeholder="（保存しません）" style="width:240px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
-          </label>
-          <label class="row" style="gap:6px;">
-            <span class="muted">CX (Search Engine ID):</span>
-            <input id="cseCxInput" type="text" placeholder="xxxxxxxxxxxxxxxxx:yyyyyyyyyyy（保存しません）" style="width:280px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
-          </label>
-          <button id="cseBtn" class="btn" type="button" title="JANとキーワードで検索">対応機種を取得</button>
-          <label class="row" style="gap:6px;">
-            <input id="cseRememberToggle" type="checkbox" />
-            <span class="muted">この端末に保存（APIキー/CX）</span>
-          </label>
-        </div>
-        <div id="cseOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
-      </div>
-      <div class="row" style="gap:6px; margin-top:8px;">
-        <button id="ddgBtn" class="btn" type="button" title="DuckDuckGo Instant Answerで対応機種候補を抽出">DDGで対応機種を取得</button>
-        <span class="muted" style="font-size:12px;">Results from <a href="https://duckduckgo.com/" target="_blank" rel="noopener">DuckDuckGo</a></span>
-      </div>
-      <div id="ddgOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
       <div id="specCard" class="card" style="display:none;">
         <div class="title2">仕様</div>
         <table id="specs"></table>
+      </div>
+      <div id="vaultCard" class="card">
+        <div class="title2">製品データの保管と再利用</div>
+        <div class="row" style="gap:6px; flex-wrap:wrap;">
+          <button id="vaultSaveBtn" class="btn" type="button">保存/更新</button>
+          <button id="vaultListBtn" class="btn btn-secondary" type="button">一覧表示</button>
+          <button id="vaultExportBtn" class="btn btn-secondary" type="button">エクスポート</button>
+          <button id="vaultImportBtn" class="btn btn-secondary" type="button">インポート</button>
+          <button id="vaultDeleteBtn" class="btn btn-secondary" type="button" title="現在のコードのエントリを削除">削除(このコード)</button>
+        </div>
+        <div id="vaultStatus" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
       </div>
       <div class="muted">製品データは `data/products.json` に格納されています。コードが一致する製品が見つからない場合は基本情報のみ表示します。</div>
     </section>
@@ -255,14 +261,13 @@
       const codeParam = (params.get('code')||'').trim();
       const code = codeParam.replace(/\s+/g,'');
       const isLikelyCode = /^\d{8}$|^\d{12}$|^\d{13}$/.test(code);
-      const state = { product:null, ecDevices:[], cseDevices:[], ddgDevices:[], ecResults:{ rk:[], yh:[] } };
+      const state = { product:null, ecDevices:[], ecResults:{ rk:[], yh:[] }, vaultApplied: false };
       const SETTINGS_KEY = 'cw_product_settings';
       const HISTORY_KEY = 'cw_product_history_v1';
       const CACHE_KEY = 'cw_product_cache_v1';
       // Optional local persistence (opt-in)
       const AI_STORE = { remember: 'cw_ai_remember', apiKey: 'cw_ai_api_key', clientId: 'cw_ai_client_id' };
-      const CSE_STORE = { remember: 'cw_cse_remember', apiKey: 'cw_cse_api_key', cx: 'cw_cse_cx' };
-      const DS_STORE = { remember: 'cw_ds_remember', apiKey: 'cw_ds_api_key', model: 'cw_ds_model', proxyOnly: 'cw_ds_proxy_only' };
+      const DS_STORE = { remember: 'cw_ds_remember', apiKey: 'cw_ds_api_key', model: 'cw_ds_model', proxyOnly: 'cw_ds_proxy_only', generalInfo: 'cw_ds_general_info' };
       // OAuth session (in-memory only)
       const oauthSession = { accessToken: null, expiresAt: 0, clientId: null };
       function isTokenValid(){ return !!oauthSession.accessToken && Date.now() < oauthSession.expiresAt; }
@@ -292,6 +297,8 @@
             specTable.appendChild(tr);
           }
         } else { $('#specCard').style.display = 'none'; }
+        // Vault badge
+        const vb = document.getElementById('vaultBadge'); if (vb) vb.style.display = state.vaultApplied ? '' : 'none';
       }
 
       // --- Online fetchers (fallback) ---
@@ -452,7 +459,12 @@
       function saveSettings(s){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
       function getSettings(){
         const s = loadSettings();
-        return { useOnline: s.useOnline!==false, saveHistory: s.saveHistory!==false };
+        return {
+          useOnline: s.useOnline!==false,
+          saveHistory: s.saveHistory!==false,
+          vaultEnable: s.vaultEnable!==false,
+          vaultPrefer: s.vaultPrefer!==false
+        };
       }
       function renderSettings(){
         const s = getSettings();
@@ -460,6 +472,10 @@
         const saveEl = document.getElementById('saveHistoryToggle');
         if (useEl){ useEl.checked = !!s.useOnline; useEl.addEventListener('change', ()=>{ const cur=getSettings(); cur.useOnline = useEl.checked; saveSettings(cur); }); }
         if (saveEl){ saveEl.checked = !!s.saveHistory; saveEl.addEventListener('change', ()=>{ const cur=getSettings(); cur.saveHistory = saveEl.checked; saveSettings(cur); renderHistory(); }); }
+        const vEn = document.getElementById('vaultEnableToggle');
+        const vPr = document.getElementById('vaultPreferToggle');
+        if (vEn){ vEn.checked = !!s.vaultEnable; vEn.addEventListener('change', ()=>{ const cur=getSettings(); cur.vaultEnable = vEn.checked; saveSettings(cur); load(); }); }
+        if (vPr){ vPr.checked = !!s.vaultPrefer; vPr.addEventListener('change', ()=>{ const cur=getSettings(); cur.vaultPrefer = vPr.checked; saveSettings(cur); load(); }); }
       }
 
       function loadHistory(){ try{ return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')||[]; }catch(_){ return []; } }
@@ -524,36 +540,6 @@
         }catch(_){/* ignore */}
       }
 
-      // CSE (Custom Search) persistence (API Key / CX only)
-      function applyStoredCSEInputs(){
-        try{
-          const remember = localStorage.getItem(CSE_STORE.remember) === '1';
-          const rememberEl = document.getElementById('cseRememberToggle'); if (rememberEl) rememberEl.checked = remember;
-          if (!remember) return;
-          const keyEl = document.getElementById('cseKeyInput');
-          const cxEl = document.getElementById('cseCxInput');
-          const k = localStorage.getItem(CSE_STORE.apiKey) || '';
-          const c = localStorage.getItem(CSE_STORE.cx) || '';
-          if (keyEl) keyEl.value = k;
-          if (cxEl) cxEl.value = c;
-        }catch(_){/* ignore */}
-      }
-      function persistCSEInputsIfNeeded(){
-        try{
-          const remember = !!(document.getElementById('cseRememberToggle')?.checked);
-          const keyEl = document.getElementById('cseKeyInput');
-          const cxEl = document.getElementById('cseCxInput');
-          if (remember){
-            localStorage.setItem(CSE_STORE.remember, '1');
-            if (keyEl) localStorage.setItem(CSE_STORE.apiKey, keyEl.value||'');
-            if (cxEl) localStorage.setItem(CSE_STORE.cx, cxEl.value||'');
-          }else{
-            localStorage.removeItem(CSE_STORE.remember);
-            localStorage.removeItem(CSE_STORE.apiKey);
-            localStorage.removeItem(CSE_STORE.cx);
-          }
-        }catch(_){/* ignore */}
-      }
 
       // --- AI Summary (no key persistence) ---
       function getProvider(){ const el = document.getElementById('aiProvider'); return (el?.value||'openai'); }
@@ -576,6 +562,7 @@
           const keyEl = document.getElementById('dsKeyInput');
           const modelEl = document.getElementById('dsModel');
           const proxyOnlyEl = document.getElementById('dsProxyOnlyToggle');
+          const generalInfoEl = document.getElementById('dsGeneralInfoToggle');
           if (remember){
             localStorage.setItem(DS_STORE.remember, '1');
             if (keyEl) localStorage.setItem(DS_STORE.apiKey, keyEl.value||'');
@@ -584,11 +571,13 @@
               localStorage.setItem(DS_STORE.model, JSON.stringify(arr.length? arr : [modelEl.value||'deepseek/deepseek-chat-v3.1:free']));
             }
             if (proxyOnlyEl) localStorage.setItem(DS_STORE.proxyOnly, proxyOnlyEl.checked? '1':'0');
+            if (generalInfoEl) localStorage.setItem(DS_STORE.generalInfo, generalInfoEl.checked? '1':'0');
           }else{
             localStorage.removeItem(DS_STORE.remember);
             localStorage.removeItem(DS_STORE.apiKey);
             localStorage.removeItem(DS_STORE.model);
             localStorage.removeItem(DS_STORE.proxyOnly);
+            localStorage.removeItem(DS_STORE.generalInfo);
           }
         }catch(_){/* ignore */}
       }
@@ -610,6 +599,7 @@
               for (const opt of Array.from(modelEl.options||[])) { opt.selected = set.has(opt.value); }
             }
             const pEl = document.getElementById('dsProxyOnlyToggle'); if (pEl) { const pv = localStorage.getItem(DS_STORE.proxyOnly)==='1'; pEl.checked = !!pv; }
+            const gEl = document.getElementById('dsGeneralInfoToggle'); if (gEl) { const gv = localStorage.getItem(DS_STORE.generalInfo)==='1'; gEl.checked = !!gv; }
           }
           // restore reasoning toggle state
           const showR = localStorage.getItem('cw_ds_show_reasoning') === '1';
@@ -649,14 +639,53 @@
       function handleDsClear(){ const box = document.getElementById('dsChat'); if (box) box.textContent=''; }
       function persistDsReasoningToggle(){ try{ const el = document.getElementById('dsReasoningToggle'); if (el) localStorage.setItem('cw_ds_show_reasoning', el.checked? '1':'0'); }catch(_){/* ignore */} }
       function buildDeepSeekSystemPrompt(){
-        // Strict: Only use provided facts. No guessing, no external browsing.
+        // Switch behavior by General Info toggle
+        const allowGeneral = !!document.getElementById('dsGeneralInfoToggle')?.checked;
+        if (allowGeneral){
+          return (
+            'あなたは製品ページ専用の検索チャットボットです。' +
+            ' 回答は日本語で、簡潔かつ正確に記述してください。' +
+            ' 製品固有の事実（型番/仕様/価格/対応機種など）は、必ずfactsの内容のみを根拠にし、推測や補完はしないでください。' +
+            ' ただし質問に答えるための一般的な背景知識（外部参照に相当）は使用可です。その場合は文中で「（一般情報）」と明示し、製品固有情報と混同しないでください。' +
+            ' factsに存在しない製品固有情報は「不明」と答えてください。' +
+            ' 対応機種はfacts.supported_devicesに含まれるもののみを列挙し、それ以外は記載しないでください。' +
+            ' 特定の機種名がfacts.supported_devicesに存在しない場合は「不明」と答え、必要に応じて一般的な互換性の傾向は「（一般情報）」として別記してください。' +
+            ' 出力形式: 1) 要点（箇条書き）, 2) 必要に応じて対応機種, 3) 補足（一般情報がある場合のみ）。'
+          );
+        }
+        // Strict: ban general info supplementation
         return (
           'あなたは製品ページ専用の検索チャットボットです。' +
-          ' 提供されたfactsだけを根拠に、日本語で簡潔に回答してください。' +
-          ' 不明な点は不明と答え、推測・憶測・外部参照は行わないでください。' +
-          ' 対応機種はfacts.supported_devicesに含まれるもののみを列挙し、それ以外は書かないでください。'
+          ' 回答は日本語で、簡潔かつ正確に記述してください。' +
+          ' 回答はfactsに含まれる製品固有の事実のみに厳密に基づけてください。一般的な背景知識の補足は使用しないでください。' +
+          ' factsに存在しない事項は「不明」と明確に回答してください。' +
+          ' 対応機種はfacts.supported_devicesに含まれるもののみを列挙し、それ以外は記載しないでください。' +
+          ' 出力形式: 1) 要点（箇条書き）, 2) 必要に応じて対応機種。'
         );
       }
+      // Abort control for streaming
+      let dsAbortController = null;
+      function dsStopStreaming(){
+        try{
+          if (dsAbortController){ dsAbortController.abort(); }
+        }catch(_){/* ignore */}
+      }
+      // Helpers
+      function normalizeOpenRouterError(status, text, headers){
+        const msg = String(text||'').trim();
+        if (status === 429){
+          const ra = headers?.get ? headers.get('Retry-After') : undefined;
+          const wait = ra ? `（Retry-After: ${ra}s）` : '';
+          return `レート制限(429)。しばらく待って再試行してください ${wait}`;
+        }
+        if (status === 403 || status === 404){
+          if (/Free model publication/i.test(msg)){
+            return 'データポリシー/公開設定により拒否されました: Free model publication を有効にしてください (https://openrouter.ai/settings/privacy)';
+          }
+        }
+        return `HTTP ${status} ${msg||'Error'}`;
+      }
+      function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
       async function callDeepSeekChat(query, modelOverride){
         const key = getDeepSeekKey();
         const model = modelOverride || getDeepSeekModel();
@@ -684,21 +713,17 @@
         if (!dres.ok){
           let msg = dres.statusText || 'Error';
           try{ msg = await dres.text(); }catch(_){/* ignore */}
-          if (dres.status === 429){
-            const ra = dres.headers?.get('Retry-After');
-            const wait = ra ? `（Retry-After: ${ra}s）` : '';
-            throw new Error(`レート制限(429)。しばらく待って再試行してください ${wait}`);
-          }
-          throw new Error(`HTTP ${dres.status} ${msg}`);
+          throw new Error(normalizeOpenRouterError(dres.status, msg, dres.headers));
         }
-        const djson = await dres.json();
-        const dtxt = djson?.choices?.[0]?.message?.content || '';
-        return String(dtxt||'').trim();
+        const json = await dres.json();
+        const txt = json?.choices?.[0]?.message?.content || '';
+        return String(txt||'').trim();
       }
       // Streaming version using SSE-like chunks over fetch
       async function callDeepSeekChatStream(query, modelOverride){
         const key = getDeepSeekKey();
         const model = modelOverride || getDeepSeekModel();
+        // 
         const facts = productToFacts(state.product || {});
         const sys = buildDeepSeekSystemPrompt();
         const messages = [
@@ -708,62 +733,82 @@
         ];
         const url = 'https://openrouter.ai/api/v1/chat/completions';
         const body = { model, messages, temperature: 0.1, max_tokens: 800, user: getAnonUserId(), stream: true };
-        // 1) Try proxy first
+        // 1) Try proxy first (with backoff and abort)
         try{
-          const pres = await fetch('/api/openrouter-chat', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body), mode:'cors', cache:'no-store' });
-          if (pres.ok){
-            const preader = pres.body?.getReader ? pres.body.getReader() : null;
-            if (!preader){ const full = await callDeepSeekChat(query, model); appendDsChat('assistant', full); return full; }
-            appendDsStreamStart();
-            const decoder = new TextDecoder('utf-8');
-            let buffer = '';
-            let finalText = '';
-            for(;;){
-              const {done, value} = await preader.read();
-              if (done) break;
-              buffer += decoder.decode(value, { stream:true });
-              const parts = buffer.split('\n\n');
-              buffer = parts.pop() || '';
-              for (const part of parts){
-                const lines = part.split('\n');
-                for (const line of lines){
-                  const s = line.trim();
-                  if (!s || s.startsWith(':') || s.startsWith('event:')) continue;
-                  if (s.startsWith('data:')){
-                    const payload = s.slice(5).trim();
-                    if (payload === '[DONE]') { appendDsStreamEnd(); continue; }
-                    try{
-                      const j = JSON.parse(payload);
-                      const delta = j?.choices?.[0]?.delta;
-                      const rchunk = delta?.reasoning_content || '';
-                      if (rchunk && document.getElementById('dsReasoningToggle')?.checked){ ensureDsReasoningHeader(); appendDsStreamChunk(rchunk); }
-                      const chunk = delta?.content || '';
-                      if (chunk){ ensureDsAnswerHeader(); finalText += chunk; appendDsStreamChunk(chunk); }
-                    }catch(_){ }
+          let attempts = 0;
+          for(;;){
+            dsAbortController = new AbortController();
+            const pres = await fetch('/api/openrouter-chat', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body), mode:'cors', cache:'no-store', signal: dsAbortController.signal });
+            if (pres.ok){
+              const preader = pres.body?.getReader ? pres.body.getReader() : null;
+              if (!preader){ const full = await callDeepSeekChat(query, model); appendDsChat('assistant', full); return full; }
+              appendDsStreamStart();
+              const decoder = new TextDecoder('utf-8');
+              let buffer = '';
+              let finalText = '';
+              for(;;){
+                const {done, value} = await preader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream:true });
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop() || '';
+                for (const part of parts){
+                  const lines = part.split('\n');
+                  for (const line of lines){
+                    const s = line.trim();
+                    if (!s || s.startsWith(':') || s.startsWith('event:')) continue;
+                    if (s.startsWith('data:')){
+                      const payload = s.slice(5).trim();
+                      if (payload === '[DONE]') { appendDsStreamEnd(); continue; }
+                      try{
+                        const j = JSON.parse(payload);
+                        const delta = j?.choices?.[0]?.delta;
+                        const rchunk = delta?.reasoning_content || '';
+                        if (rchunk && document.getElementById('dsReasoningToggle')?.checked){ ensureDsReasoningHeader(); appendDsStreamChunk(rchunk); }
+                        const chunk = delta?.content || '';
+                        if (chunk){ ensureDsAnswerHeader(); finalText += chunk; appendDsStreamChunk(chunk); }
+                      }catch(_){ }
+                    }
                   }
                 }
               }
+              appendDsStreamEnd();
+              return finalText.trim();
             }
-            appendDsStreamEnd();
-            return finalText.trim();
+            if (pres.status === 429 && attempts < 2){
+              const ra = pres.headers?.get('Retry-After');
+              const delay = Math.min(10000, Math.max(1000, (ra? Number(ra)*1000 : (1000 * Math.pow(2, attempts)))));
+              attempts++;
+              await sleep(delay);
+              continue;
+            }
+            // not ok and not retriable -> break to fallback
+            break;
           }
-        }catch(_){ /* fall through to direct */ }
+        }catch(err){ if (err && err.name === 'AbortError') { appendDsChat('system','ストリーミングを停止しました'); throw err; } /* fall through to direct */ }
         // 2) Fallback to direct OpenRouter
         const proxyOnly2 = !!document.getElementById('dsProxyOnlyToggle')?.checked;
         if (proxyOnly2){ throw new Error('プロキシのみ使用が有効です。バックエンドに接続できないため処理を中止しました。'); }
         if (!key){ throw new Error('プロキシに接続できません。APIキーを入力するか、バックエンドサーバ（server.js）を起動してください。'); }
         const headers = { 'Authorization': 'Bearer '+ key, 'Content-Type':'application/json' };
         try{ headers['HTTP-Referer'] = location.origin + location.pathname; headers['X-Title'] = 'Calculator Web Product Chat'; }catch(_){/* ignore */}
-        const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body), mode:'cors', cache:'no-store' });
-        if (!res.ok){
-          let msg = res.statusText || 'Error';
-          try{ msg = await res.text(); }catch(_){/* ignore */}
-          if (res.status === 429){
+        // backoff loop for direct streaming
+        let attempts2 = 0;
+        let res;
+        for(;;){
+          dsAbortController = new AbortController();
+          res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body), mode:'cors', cache:'no-store', signal: dsAbortController.signal });
+          if (res.ok) break;
+          let msgTxt = '';
+          try{ msgTxt = await res.text(); }catch(_){ msgTxt = res.statusText || 'Error'; }
+          if (res.status === 429 && attempts2 < 2){
             const ra = res.headers?.get('Retry-After');
-            const wait = ra ? `（Retry-After: ${ra}s）` : '';
-            throw new Error(`レート制限(429)。しばらく待って再試行してください ${wait}`);
+            const delay = Math.min(10000, Math.max(1000, (ra? Number(ra)*1000 : (1000 * Math.pow(2, attempts2)))));
+            attempts2++;
+            await sleep(delay);
+            continue;
           }
-          throw new Error(`HTTP ${res.status} ${msg}`);
+          throw new Error(normalizeOpenRouterError(res.status, msgTxt, res.headers));
         }
         const reader = res.body?.getReader ? res.body.getReader() : null;
         if (!reader){ const full = await callDeepSeekChat(query, model); appendDsChat('assistant', full); return full; }
@@ -772,7 +817,9 @@
         let buffer = '';
         let finalText = '';
         for(;;){
-          const {done, value} = await reader.read();
+          let done, value;
+          try{ ({done, value} = await reader.read()); }
+          catch(err){ if (err && err.name==='AbortError'){ appendDsStreamEnd(); throw err; } else { throw err; } }
           if (done) break;
           buffer += decoder.decode(value, { stream:true });
           const parts = buffer.split('\n\n');
@@ -811,22 +858,106 @@
         try{
           // Multi-model: run sequentially for each selected model
           const models = getDeepSeekModels();
+          // Preflight warning for :free models under proxy-only
+          const proxyOn = !!document.getElementById('dsProxyOnlyToggle')?.checked;
+          if (proxyOn && models.some(m=>m.includes(':free'))){
+            appendDsChat('system','注意: ":free" モデルは OpenRouter 設定「Free model publication」が必要です（https://openrouter.ai/settings/privacy）。失敗する場合は設定を有効化してください。');
+          }
           for (const m of models){
             appendDsHeading(m);
-            await callDeepSeekChatStream(q, m);
+            try{
+              const t0 = (performance && performance.now)? performance.now(): Date.now();
+              await callDeepSeekChatStream(q, m);
+              const t1 = (performance && performance.now)? performance.now(): Date.now();
+              const sec = Math.max(0, (t1 - t0)/1000).toFixed(2);
+              appendDsChat('system', `所要時間: ${sec}s`);
+            }catch(e){
+              const raw = (e && e.message)? String(e.message) : String(e||'');
+              let hint = '';
+              if (raw.includes('Free model publication')){
+                hint = '\nヒント: OpenRouterの設定で「Free model publication」を有効にしてください: https://openrouter.ai/settings/privacy';
+              }
+              appendDsChat('assistant', `エラー (${m}): ${raw}${hint}`);
+            }
           }
         }catch(e){ appendDsChat('assistant', `エラー: ${e.message}`); }
         finally{ if (btn) btn.disabled = false; }
       }
+      async function handleDsCopy(){
+        try{
+          const box = document.getElementById('dsChat'); if (!box) return;
+          const text = box.textContent || '';
+          if (navigator?.clipboard?.writeText){ await navigator.clipboard.writeText(text); appendDsChat('system','コピーしました'); }
+          else{
+            const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); appendDsChat('system','コピーしました');
+          }
+        }catch(_){ appendDsChat('system','コピーに失敗しました'); }
+      }
       function getSupportedDevices(){
         try{
           const a = Array.isArray(state.ecDevices)? state.ecDevices: [];
-          const b = Array.isArray(state.cseDevices)? state.cseDevices: [];
-          const c = Array.isArray(state.ddgDevices)? state.ddgDevices: [];
           const set = new Set();
-          for (const x of [...a, ...b, ...c]){ const s = String(x||'').trim(); if (s) set.add(s); }
+          for (const x of a){ const s = String(x||'').trim(); if (s) set.add(s); }
           return Array.from(set).slice(0,50);
         }catch(_){ return []; }
+      }
+      // --- Product Vault (localStorage-based) ---
+      const VAULT_KEY = 'cw_product_vault_store_v1';
+      function readVaultStore(){ try{ return JSON.parse(localStorage.getItem(VAULT_KEY)||'{}'); }catch(_){ return {}; } }
+      function writeVaultStore(obj){ try{ localStorage.setItem(VAULT_KEY, JSON.stringify(obj)); }catch(_){ /* ignore quota */ } }
+      function mergeArraysUniq(a,b){ const A=Array.isArray(a)?a:[], B=Array.isArray(b)?b:[]; return Array.from(new Set([...A,...B].map(x=> String(x||'').trim()).filter(Boolean))); }
+      function mergeSpecs(prev,next){
+        const out = { ...(prev||{}) };
+        const n = next||{};
+        for (const k of Object.keys(n)){
+          const v = n[k];
+          if (Array.isArray(v)) out[k] = mergeArraysUniq(out[k], v);
+          else if (v && typeof v === 'object') out[k] = { ...(out[k]||{}), ...v };
+          else if (v !== undefined && String(v).trim()) out[k] = v;
+        }
+        return out;
+      }
+      function mergeProducts(prev, incoming){
+        const p = prev||{}; const n = incoming||{};
+        const codeM = n.code || p.code || '';
+        return {
+          code: codeM,
+          name: (n.name && n.name.trim()) ? n.name : (p.name||''),
+          brand: (n.brand && n.brand.trim()) ? n.brand : (p.brand||''),
+          category: (n.category && n.category.trim()) ? n.category : (p.category||''),
+          description: (n.description && n.description.trim()) ? n.description : (p.description||''),
+          specs: mergeSpecs(p.specs, n.specs),
+          supportedDevices: mergeArraysUniq(p.supportedDevices, n.supportedDevices),
+          sources: {
+            ec: !!(p?.sources?.ec || n?.sources?.ec),
+            chat: !!(p?.sources?.chat || n?.sources?.chat),
+            manual: !!(p?.sources?.manual || n?.sources?.manual),
+            vault: !!(p?.sources?.vault || n?.sources?.vault)
+          },
+          updatedAt: Date.now()
+        };
+      }
+      function vaultUpsert(entry){ if (!entry?.code) throw new Error('コードがありません'); const store=readVaultStore(); const merged=mergeProducts(store[entry.code], entry); store[entry.code]=merged; writeVaultStore(store); return merged; }
+      function vaultGet(code){ const store=readVaultStore(); return store[code]||null; }
+      function vaultList(){ const store=readVaultStore(); return Object.values(store); }
+      function vaultDelete(code){ const store=readVaultStore(); if (store[code]){ delete store[code]; writeVaultStore(store); return true; } return false; }
+      function vaultExport(){ return JSON.stringify(readVaultStore(), null, 2); }
+      function vaultImport(jsonText){ try{ const obj = JSON.parse(jsonText||'{}'); if (obj && typeof obj==='object'){ const store=readVaultStore(); for (const [k,v] of Object.entries(obj)){ if (!k) continue; store[k] = mergeProducts(store[k], v); } writeVaultStore(store); return true; } }catch(_){ } return false; }
+      function buildVaultEntryFromState(source){
+        const p = state.product || buildFallbackProductFromEC() || { code: code || '', name:'', brand:'', category:'', description:'', specs:{} };
+        const devs = getSupportedDevices();
+        const entry = {
+          code: p.code || code || '',
+          name: p.name || '',
+          brand: p.brand || '',
+          category: p.category || '',
+          description: p.description || '',
+          specs: p.specs || {},
+          supportedDevices: Array.isArray(devs) ? devs.slice(0,50) : [],
+          sources: { ec: !!source?.ec, chat: !!source?.chat, manual: !!source?.manual },
+          updatedAt: Date.now()
+        };
+        return entry;
       }
       function productToFacts(p){
         if (!p) return {};
@@ -1128,88 +1259,6 @@
           return Array.from(out);
         }catch(_){ return []; }
       }
-      async function searchSupportedDevicesByJAN(jan, key, cx){
-        if (!jan) throw new Error('JANコードがありません');
-        if (!key) throw new Error('APIキーを入力してください');
-        if (!cx) throw new Error('CX(Search Engine ID)を入力してください');
-        const q = `${jan} 対応機種`;
-        const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&num=8&lr=lang_ja`;
-        const res = await fetch(url, { cache:'no-store' });
-        if (!res.ok){
-          let msg = `検索失敗 (${res.status})`;
-          try{ const j = await res.json(); if (j?.error?.message) msg = j.error.message; }catch(_){/* ignore */}
-          throw new Error(msg);
-        }
-        const json = await res.json();
-        const items = json?.items || [];
-        const found = new Set();
-        for (const it of items){
-          const texts = [it.title||'', it.snippet||''];
-          const mt = it.pagemap?.metatags || [];
-          for (const tag of mt){
-            if (typeof tag['og:description']==='string') texts.push(tag['og:description']);
-            if (typeof tag['description']==='string') texts.push(tag['description']);
-          }
-          const cand = extractDevicesFromText(texts.join(' \n '));
-          for (const c of cand){ found.add(c); }
-        }
-        return Array.from(found);
-      }
-      // --- DuckDuckGo Instant Answer (no key) ---
-      function jsonpRequest(url, cbParam='callback', timeoutMs=8000){
-        return new Promise((resolve, reject)=>{
-          try{
-            const cbName = `__ddg_cb_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
-            const sep = url.includes('?') ? '&' : '?';
-            const full = `${url}${sep}${cbParam}=${encodeURIComponent(cbName)}`;
-            let timed = false;
-            const to = window.setTimeout(()=>{ timed=true; cleanup(); reject(new Error('JSONP timeout')); }, timeoutMs);
-            function cleanup(){ try{ window[cbName]=undefined; delete window[cbName]; }catch{} if(s&&s.parentNode) s.parentNode.removeChild(s); window.clearTimeout(to); }
-            window[cbName] = (data)=>{ if(timed) return; cleanup(); resolve(data); };
-            const s = document.createElement('script'); s.src = full; s.async = true; s.onerror = ()=>{ if(timed) return; cleanup(); reject(new Error('JSONP error')); };
-            document.head.appendChild(s);
-          }catch(e){ reject(e); }
-        });
-      }
-      async function fetchDuckDuckGoIA(query){
-        const base = 'https://api.duckduckgo.com/';
-        const params = new URLSearchParams({ q: query, format:'json', no_redirect:'1', no_html:'1', pretty:'0', t:'cw_product', kl:'jp-jp' });
-        const url = `${base}?${params.toString()}`;
-        try{
-          const res = await fetch(url, { cache:'no-store' });
-          if (res.ok) return await res.json();
-        }catch(_){ /* try JSONP below */ }
-        // Fallback to JSONP for environments without proper CORS
-        return await jsonpRequest(url, 'callback');
-      }
-      function parseDDGTexts(json){
-        try{
-          const texts = [];
-          if (json){
-            if (typeof json.AbstractText === 'string') texts.push(json.AbstractText);
-            if (typeof json.Heading === 'string') texts.push(json.Heading);
-            if (Array.isArray(json.RelatedTopics)){
-              for (const rt of json.RelatedTopics){
-                if (rt && Array.isArray(rt.Topics)){
-                  for (const t of rt.Topics){ if (typeof t.Text==='string') texts.push(t.Text); }
-                } else if (rt && typeof rt.Text==='string') {
-                  texts.push(rt.Text);
-                }
-              }
-            }
-            if (Array.isArray(json.Results)){
-              for (const r of json.Results){ if (typeof r.Text==='string') texts.push(r.Text); }
-            }
-          }
-          return texts;
-        }catch(_){ return []; }
-      }
-      async function searchSupportedDevicesByDDG(query){
-        const json = await fetchDuckDuckGoIA(query);
-        const texts = parseDDGTexts(json);
-        const devices = extractDevicesFromText(texts.join(' \n '));
-        return Array.from(new Set(devices)).slice(0,50);
-      }
       async function handleLocalSummary(){ const out = document.getElementById('aiOut'); const p = state.product; out.textContent = genLocalSummary(p); }
       async function handleLLMSummary(){
         const out = document.getElementById('aiOut');
@@ -1248,11 +1297,6 @@
                     }catch(_){ try{ state.ecDevices = []; }catch(__){} }
                   }
                 }catch(_){ /* ignore auto EC errors to keep LLM flow */ }
-              }
-              // Also enrich supported devices via DDG silently when not yet populated
-              const hasDDG = Array.isArray(state.ddgDevices) && state.ddgDevices.length;
-              if (!hasDDG){
-                try{ await autoFetchDDGSilently(); }catch(_){ /* ignore */ }
               }
               // Build minimal product from EC if primary facts are still insufficient
               const fb = buildFallbackProductFromEC();
@@ -1304,12 +1348,24 @@
           // 3) If still not found, try EC-based minimal product silently
           if (!state.product){
             await autoFetchECResultsSilently();
-            // Also try DDG silently to collect supported devices candidates
-            await autoFetchDDGSilently();
             const fb = buildFallbackProductFromEC();
             if (fb && factsHasInfo(productToFacts(fb))){ state.product = fb; }
           }
         }catch(_){ state.product = null; }
+        // 4) Overlay with Product Vault (if enabled)
+        try{
+          state.vaultApplied = false;
+          const set = getSettings();
+          if (set.vaultEnable){
+            const ve = vaultGet(code);
+            if (ve){
+              const merged = set.vaultPrefer ? mergeProducts(state.product, ve) : mergeProducts(ve, state.product);
+              merged.sources = { ...(merged.sources||{}), vault: true };
+              state.product = merged;
+              state.vaultApplied = true;
+            }
+          }
+        }catch(_){ /* ignore vault errors */ }
         render();
         if (state.product){ cacheProduct(state.product); addToHistory(state.product); renderHistory(); }
       }
@@ -1332,32 +1388,6 @@
       const rememberTgl = document.getElementById('aiRememberToggle'); if (rememberTgl) rememberTgl.addEventListener('change', persistAIInputsIfNeeded);
       const keyEl = document.getElementById('aiKeyInput'); if (keyEl) keyEl.addEventListener('input', ()=>{ persistAIInputsIfNeeded(); });
       const cidEl = document.getElementById('aiClientIdInput'); if (cidEl) cidEl.addEventListener('input', ()=>{ persistAIInputsIfNeeded(); });
-      // CSE handlers
-      const cseBtn = document.getElementById('cseBtn'); if (cseBtn) cseBtn.addEventListener('click', async()=>{
-        const out = document.getElementById('cseOut');
-        out.textContent = '検索中…';
-        try{
-          const jan = (state.product?.code || code || '').trim();
-          const key = (document.getElementById('cseKeyInput')?.value||'').trim();
-          const cx = (document.getElementById('cseCxInput')?.value||'').trim();
-          const list = await searchSupportedDevicesByJAN(jan, key, cx);
-          try{ state.cseDevices = Array.from(new Set((list||[]).map(x=> String(x||'').trim()))).filter(Boolean).slice(0,50); }catch(_){ state.cseDevices = []; }
-          if (!list.length){ out.textContent = '対応機種は見つかりませんでした。'; }
-          else { out.textContent = '対応機種:\n- ' + list.slice(0,50).join('\n- '); }
-        }catch(e){ out.textContent = `エラー: ${e.message}`; }
-      });
-      const ddgBtn = document.getElementById('ddgBtn'); if (ddgBtn) ddgBtn.addEventListener('click', async()=>{
-        const out = document.getElementById('ddgOut');
-        out.textContent = '検索中…';
-        try{
-          const jan = (state.product?.code || code || '').trim();
-          const q = `${jan} 対応機種`;
-          const list = await searchSupportedDevicesByDDG(q);
-          try{ state.ddgDevices = Array.from(new Set((list||[]).map(x=> String(x||'').trim()))).filter(Boolean).slice(0,50); }catch(_){ state.ddgDevices = []; }
-          if (!list.length){ out.textContent = '対応機種は見つかりませんでした。'; }
-          else { out.textContent = '対応機種:\n- ' + state.ddgDevices.join('\n- '); }
-        }catch(e){ out.textContent = `エラー: ${e.message}`; }
-      });
       // DS inputs & handlers
       const dsRememberTgl = document.getElementById('dsRememberToggle'); if (dsRememberTgl) dsRememberTgl.addEventListener('change', persistDSInputsIfNeeded);
       const dsKeyEl = document.getElementById('dsKeyInput'); if (dsKeyEl) dsKeyEl.addEventListener('input', ()=>{ persistDSInputsIfNeeded(); });
@@ -1367,9 +1397,9 @@
       const dsClearBtn = document.getElementById('dsClearBtn'); if (dsClearBtn) dsClearBtn.addEventListener('click', handleDsClear);
       const dsReasonTgl = document.getElementById('dsReasoningToggle'); if (dsReasonTgl) dsReasonTgl.addEventListener('change', persistDsReasoningToggle);
       const dsProxyOnlyTgl = document.getElementById('dsProxyOnlyToggle'); if (dsProxyOnlyTgl) dsProxyOnlyTgl.addEventListener('change', persistDSInputsIfNeeded);
-      const cseRememberTgl = document.getElementById('cseRememberToggle'); if (cseRememberTgl) cseRememberTgl.addEventListener('change', persistCSEInputsIfNeeded);
-      const cseKeyEl = document.getElementById('cseKeyInput'); if (cseKeyEl) cseKeyEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
-      const cseCxEl = document.getElementById('cseCxInput'); if (cseCxEl) cseCxEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
+      const dsGeneralInfoTgl = document.getElementById('dsGeneralInfoToggle'); if (dsGeneralInfoTgl) dsGeneralInfoTgl.addEventListener('change', persistDSInputsIfNeeded);
+      const dsCopyBtn = document.getElementById('dsCopyBtn'); if (dsCopyBtn) dsCopyBtn.addEventListener('click', handleDsCopy);
+      /* Using unified VAULT_KEY-based Product Vault (defined earlier) */
       // --- EC (Rakuten/Yahoo) search inputs persist/restore ---
       const EC_STORE = 'ec_store_v1';
       const RAKUTEN_APP_ID_DEFAULT = '1090907341276509341';
@@ -1570,17 +1600,6 @@
             state.ecDevices = Array.from(collected).slice(0,50);
           }catch(_){ /* ignore */ }
         }catch(_){ /* ignore network errors */ }
-      }
-      // Silently fetch DDG IA texts and update ddgDevices without touching UI
-      async function autoFetchDDGSilently(){
-        try{
-          const qBase = bestQueryForEC();
-          const jan = (state.product?.code || code || '').trim();
-          const q = ((qBase || jan) ? `${qBase || jan} 対応機種` : '').trim();
-          if (!q) return;
-          const list = await searchSupportedDevicesByDDG(q);
-          try{ state.ddgDevices = Array.from(new Set((list||[]).map(x=> String(x||'').trim()))).filter(Boolean).slice(0,50); }catch(_){ state.ddgDevices = []; }
-        }catch(_){ /* ignore */ }
       }
       const ecBtn = document.getElementById('ecSearchBtn'); if (ecBtn) ecBtn.addEventListener('click', async ()=>{
         const q = bestQueryForEC(); if (!q){ alert('検索キーワードがありません'); return; }
@@ -1808,16 +1827,55 @@
       }
       if (camStartBtn){ camStartBtn.addEventListener('click', ()=>{ startCamera(); }); }
       if (camStopBtn){ camStopBtn.addEventListener('click', ()=>{ stopCamera(); }); }
+      // Vault buttons
+      const vaultOut = document.getElementById('vaultStatus');
+      const vaultSaveBtn = document.getElementById('vaultSaveBtn'); if (vaultSaveBtn) vaultSaveBtn.addEventListener('click', ()=>{
+        try{
+          const entry = buildVaultEntryFromState({ ec:true });
+          if (!entry.code){ vaultOut.textContent = 'エラー: コードが特定できません'; return; }
+          const saved = vaultUpsert(entry);
+          vaultOut.textContent = `保存しました: ${saved.code} ${saved.name||''}`;
+        }catch(e){ vaultOut.textContent = `エラー: ${e.message}`; }
+      });
+      const vaultListBtn = document.getElementById('vaultListBtn'); if (vaultListBtn) vaultListBtn.addEventListener('click', ()=>{
+        try{
+          const list = vaultList();
+          if (!list.length){ vaultOut.textContent = '保管データはありません。'; return; }
+          const lines = list
+            .sort((a,b)=> (b.updatedAt||0)-(a.updatedAt||0))
+            .slice(0,100)
+            .map(x=> `- ${x.code} ${x.name||''} (${new Date(x.updatedAt||0).toLocaleString()})`);
+          vaultOut.textContent = `保管件数: ${list.length}\n` + lines.join('\n');
+        }catch(e){ vaultOut.textContent = `エラー: ${e.message}`; }
+      });
+      const vaultExportBtn = document.getElementById('vaultExportBtn'); if (vaultExportBtn) vaultExportBtn.addEventListener('click', async ()=>{
+        try{
+          const txt = vaultExport();
+          if (navigator?.clipboard?.writeText){ await navigator.clipboard.writeText(txt); vaultOut.textContent = 'エクスポート: クリップボードへコピーしました'; }
+          else { vaultOut.textContent = txt; }
+        }catch(e){ vaultOut.textContent = `エラー: ${e.message}`; }
+      });
+      const vaultImportBtn = document.getElementById('vaultImportBtn'); if (vaultImportBtn) vaultImportBtn.addEventListener('click', ()=>{
+        try{
+          const txt = prompt('インポートするJSONを貼り付けてください');
+          if (!txt){ return; }
+          const ok = vaultImport(txt);
+          vaultOut.textContent = ok ? 'インポートしました' : 'インポートに失敗しました';
+        }catch(e){ vaultOut.textContent = `エラー: ${e.message}`; }
+      });
+      const vaultDeleteBtn = document.getElementById('vaultDeleteBtn'); if (vaultDeleteBtn) vaultDeleteBtn.addEventListener('click', ()=>{
+        try{
+          const currentCode = (state.product?.code || code || '').trim();
+          if (!currentCode){ vaultOut.textContent = 'エラー: コードが特定できません'; return; }
+          const ok = vaultDelete(currentCode);
+          vaultOut.textContent = ok ? `削除しました: ${currentCode}` : 'エントリがありません';
+        }catch(e){ vaultOut.textContent = `エラー: ${e.message}`; }
+      });
       window.addEventListener('beforeunload', ()=>{
         const remember = !!(document.getElementById('aiRememberToggle')?.checked);
         if (!remember){
           const el = document.getElementById('aiKeyInput'); if(el) el.value='';
           const el2 = document.getElementById('aiClientIdInput'); if (el2) el2.value='';
-        }
-        const rememberCSE = !!(document.getElementById('cseRememberToggle')?.checked);
-        if (!rememberCSE){
-          const k = document.getElementById('cseKeyInput'); if (k) k.value='';
-          const c = document.getElementById('cseCxInput'); if (c) c.value='';
         }
         const rememberEC = !!(document.getElementById('ecRememberToggle')?.checked);
         if (!rememberEC){
@@ -1831,7 +1889,6 @@
       renderSettings();
       renderHistory();
       applyStoredAIInputs();
-      applyStoredCSEInputs();
       restoreDSInputsOnLoad();
       updateAIAuthUI();
       load();
