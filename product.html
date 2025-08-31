@@ -531,6 +531,10 @@
           price: (typeof p.price==='number'? p.price : null),
           currency: p.currency || '',
           specs: p.specs || {},
+          // Extra normalization fields to constrain LLM
+          device_type: (p.device_type || (p.specs && p.specs.device_type) || ''),
+          platform: (p.platform || (p.specs && p.specs.platform) || ''),
+          model: (p.model || (p.specs && p.specs.model) || ''),
           supported_devices: getSupportedDevices()
         };
       }
@@ -560,13 +564,14 @@
       async function genOpenAISummary(p, key){
         if (!key) throw new Error('APIキーが設定されていません');
         const f = productToFacts(p);
-        const prompt = `以下の製品データ(facts)から、日本語で出力してください。\n`+
+        const prompt = `以下の製品データ(facts)のみを根拠に、日本語で要約してください。外部知識や推測は一切禁止です。\n`+
           `必ず次の形式で: \n`+
           `【説明】…\n`+
           `【特徴】…(最大5項目の箇条書き)\n`+
           `【対応機種】… (facts.supported_devices をそのまま箇条書き。空なら「不明」。推測での追加は禁止)\n`+
           `【価格】…(分かれば)\n`+
-          `注意: 対応機種は facts.supported_devices 以外の情報から補完・類推しないこと。\n`+
+          `厳守事項: factsに存在しない内容は書かない。カテゴリ/製品種別は facts.category や facts.device_type 等に一致する場合のみ言及。\n`+
+          `禁止: 電池/バッテリー/充電/容量/電圧/電流/ケーブル/アダプタ等の言及は、facts内に明示がある場合のみ。対応機種は facts.supported_devices のみ。\n`+
           JSON.stringify(f);
         const res = await fetch('https://api.openai.com/v1/chat/completions',{
           method:'POST',
@@ -577,8 +582,8 @@
           mode:'cors',
           body: JSON.stringify({
             model: 'gpt-3.5-turbo',
-            messages: [ { role:'system', content:'You are a concise Japanese assistant.' }, { role:'user', content: prompt } ],
-            temperature: 0.2
+            messages: [ { role:'system', content:'You are a strictly extractive Japanese assistant. Use ONLY the provided facts. Never invent, infer, or assume.' }, { role:'user', content: prompt } ],
+            temperature: 0.0
           })
         });
         if (!res.ok) throw new Error('LLM呼び出しに失敗しました');
@@ -589,13 +594,14 @@
       async function genGeminiSummary(p, key){
         if (!key) throw new Error('APIキーが設定されていません');
         const f = productToFacts(p);
-        const prompt = `以下の製品データ(facts)から、日本語で出力してください。\n`+
+        const prompt = `以下の製品データ(facts)のみを根拠に、日本語で要約してください。外部知識や推測は一切禁止です。\n`+
           `必ず次の形式で: \n`+
           `【説明】…\n`+
           `【特徴】…(最大5項目の箇条書き)\n`+
           `【対応機種】… (facts.supported_devices をそのまま箇条書き。空なら「不明」。推測での追加は禁止)\n`+
           `【価格】…(分かれば)\n`+
-          `注意: 対応機種は facts.supported_devices 以外の情報から補完・類推しないこと。\n`+
+          `厳守事項: factsに存在しない内容は書かない。カテゴリ/製品種別は facts.category や facts.device_type 等に一致する場合のみ言及。\n`+
+          `禁止: 電池/バッテリー/充電/容量/電圧/電流/ケーブル/アダプタ等の言及は、facts内に明示がある場合のみ。対応機種は facts.supported_devices のみ。\n`+
           JSON.stringify(f);
         const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
         const res = await fetch(url, {
@@ -607,7 +613,7 @@
           mode:'cors',
           body: JSON.stringify({
             contents: [ { role:'user', parts:[ { text: prompt } ] } ],
-            generationConfig: { temperature: 0.2 }
+            generationConfig: { temperature: 0.0 }
           })
         });
         if (!res.ok) throw new Error('LLM呼び出しに失敗しました');
@@ -618,13 +624,14 @@
       async function genGeminiSummaryOAuth(p, accessToken){
         if (!accessToken) throw new Error('アクセストークンがありません');
         const f = productToFacts(p);
-        const prompt = `以下の製品データ(facts)から、日本語で出力してください。\n`+
+        const prompt = `以下の製品データ(facts)のみを根拠に、日本語で要約してください。外部知識や推測は一切禁止です。\n`+
           `必ず次の形式で: \n`+
           `【説明】…\n`+
           `【特徴】…(最大5項目の箇条書き)\n`+
           `【対応機種】… (facts.supported_devices をそのまま箇条書き。空なら「不明」。推測での追加は禁止)\n`+
           `【価格】…(分かれば)\n`+
-          `注意: 対応機種は facts.supported_devices 以外の情報から補完・類推しないこと。\n`+
+          `厳守事項: factsに存在しない内容は書かない。カテゴリ/製品種別は facts.category や facts.device_type 等に一致する場合のみ言及。\n`+
+          `禁止: 電池/バッテリー/充電/容量/電圧/電流/ケーブル/アダプタ等の言及は、facts内に明示がある場合のみ。対応機種は facts.supported_devices のみ。\n`+
           JSON.stringify(f);
         const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
         const res = await fetch(url, {
@@ -636,7 +643,7 @@
           mode:'cors',
           body: JSON.stringify({
             contents: [ { role:'user', parts:[ { text: prompt } ] } ],
-            generationConfig: { temperature: 0.2 }
+            generationConfig: { temperature: 0.0 }
           })
         });
         if (!res.ok) throw new Error('LLM呼び出しに失敗しました');
