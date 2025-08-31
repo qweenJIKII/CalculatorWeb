@@ -209,7 +209,7 @@
       const codeParam = (params.get('code')||'').trim();
       const code = codeParam.replace(/\s+/g,'');
       const isLikelyCode = /^\d{8}$|^\d{12}$|^\d{13}$/.test(code);
-      const state = { product:null };
+      const state = { product:null, ecDevices:[], cseDevices:[] };
       const SETTINGS_KEY = 'cw_product_settings';
       const HISTORY_KEY = 'cw_product_history_v1';
       const CACHE_KEY = 'cw_product_cache_v1';
@@ -511,6 +511,15 @@
       // --- AI Summary (no key persistence) ---
       function getProvider(){ const el = document.getElementById('aiProvider'); return (el?.value||'openai'); }
       function getInputKey(){ const el = document.getElementById('aiKeyInput'); return (el?.value||'').trim(); }
+      function getSupportedDevices(){
+        try{
+          const a = Array.isArray(state.ecDevices)? state.ecDevices: [];
+          const b = Array.isArray(state.cseDevices)? state.cseDevices: [];
+          const set = new Set();
+          for (const x of [...a, ...b]){ const s = String(x||'').trim(); if (s) set.add(s); }
+          return Array.from(set).slice(0,50);
+        }catch(_){ return []; }
+      }
       function productToFacts(p){
         if (!p) return {};
         return {
@@ -521,7 +530,8 @@
           description: p.description || '',
           price: (typeof p.price==='number'? p.price : null),
           currency: p.currency || '',
-          specs: p.specs || {}
+          specs: p.specs || {},
+          supported_devices: getSupportedDevices()
         };
       }
       function genLocalSummary(p){
@@ -538,9 +548,11 @@
         if (f.specs?.volume_ml) feats.push(`容量: ${f.specs.volume_ml}ml`);
         if (f.specs?.nutriments){ const n=f.specs.nutriments; const nn=[]; if(n['energy_kcal_100g']!=null) nn.push(`エネルギー ${n['energy_kcal_100g']}kcal/100g`); if(n.proteins_100g!=null) nn.push(`たんぱく質 ${n.proteins_100g}g/100g`); if(n.fat_100g!=null) nn.push(`脂質 ${n.fat_100g}g/100g`); if(n.carbohydrates_100g!=null) nn.push(`炭水化物 ${n.carbohydrates_100g}g/100g`); if(n.sugars_100g!=null) nn.push(`糖類 ${n.sugars_100g}g/100g`); if(n.salt_100g!=null) nn.push(`食塩相当量 ${n.salt_100g}g/100g`); if(nn.length) feats.push(`栄養: ${nn.join(' / ')}`); }
         const desc = f.description || `${title}${brand}の概要。`;
+        const devices = Array.isArray(f.supported_devices)? f.supported_devices: [];
         const lines = [
           `【説明】${desc}`,
           `【特徴】${feats.length? ('\n- '+feats.join('\n- ')):'情報が不足しています。'}`,
+          `【対応機種】${devices.length? ('\n- '+devices.join('\n- ')):'不明'}`,
           `【価格】${price}`
         ];
         return lines.join('\n');
@@ -548,7 +560,14 @@
       async function genOpenAISummary(p, key){
         if (!key) throw new Error('APIキーが設定されていません');
         const f = productToFacts(p);
-        const prompt = `以下の製品データから、日本語で簡潔に説明(1-2文)、特徴(最大5項目の箇条書き)、価格(分かれば)を出力してください。不要な推測は避けてください。\n`+JSON.stringify(f);
+        const prompt = `以下の製品データ(facts)から、日本語で出力してください。\n`+
+          `必ず次の形式で: \n`+
+          `【説明】…\n`+
+          `【特徴】…(最大5項目の箇条書き)\n`+
+          `【対応機種】… (facts.supported_devices をそのまま箇条書き。空なら「不明」。推測での追加は禁止)\n`+
+          `【価格】…(分かれば)\n`+
+          `注意: 対応機種は facts.supported_devices 以外の情報から補完・類推しないこと。\n`+
+          JSON.stringify(f);
         const res = await fetch('https://api.openai.com/v1/chat/completions',{
           method:'POST',
           headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}`, 'Cache-Control':'no-store' },
@@ -570,7 +589,14 @@
       async function genGeminiSummary(p, key){
         if (!key) throw new Error('APIキーが設定されていません');
         const f = productToFacts(p);
-        const prompt = `以下の製品データから、日本語で簡潔に説明(1-2文)、特徴(最大5項目の箇条書き)、価格(分かれば)を出力してください。不要な推測は避けてください。\n`+JSON.stringify(f);
+        const prompt = `以下の製品データ(facts)から、日本語で出力してください。\n`+
+          `必ず次の形式で: \n`+
+          `【説明】…\n`+
+          `【特徴】…(最大5項目の箇条書き)\n`+
+          `【対応機種】… (facts.supported_devices をそのまま箇条書き。空なら「不明」。推測での追加は禁止)\n`+
+          `【価格】…(分かれば)\n`+
+          `注意: 対応機種は facts.supported_devices 以外の情報から補完・類推しないこと。\n`+
+          JSON.stringify(f);
         const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
         const res = await fetch(url, {
           method:'POST',
@@ -592,7 +618,14 @@
       async function genGeminiSummaryOAuth(p, accessToken){
         if (!accessToken) throw new Error('アクセストークンがありません');
         const f = productToFacts(p);
-        const prompt = `以下の製品データから、日本語で簡潔に説明(1-2文)、特徴(最大5項目の箇条書き)、価格(分かれば)を出力してください。不要な推測は避けてください。\n`+JSON.stringify(f);
+        const prompt = `以下の製品データ(facts)から、日本語で出力してください。\n`+
+          `必ず次の形式で: \n`+
+          `【説明】…\n`+
+          `【特徴】…(最大5項目の箇条書き)\n`+
+          `【対応機種】… (facts.supported_devices をそのまま箇条書き。空なら「不明」。推測での追加は禁止)\n`+
+          `【価格】…(分かれば)\n`+
+          `注意: 対応機種は facts.supported_devices 以外の情報から補完・類推しないこと。\n`+
+          JSON.stringify(f);
         const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
         const res = await fetch(url, {
           method:'POST',
@@ -870,6 +903,7 @@
           const key = (document.getElementById('cseKeyInput')?.value||'').trim();
           const cx = (document.getElementById('cseCxInput')?.value||'').trim();
           const list = await searchSupportedDevicesByJAN(jan, key, cx);
+          try{ state.cseDevices = Array.from(new Set((list||[]).map(x=> String(x||'').trim()))).filter(Boolean).slice(0,50); }catch(_){ state.cseDevices = []; }
           if (!list.length){ out.textContent = '対応機種は見つかりませんでした。'; }
           else { out.textContent = '対応機種:\n- ' + list.slice(0,50).join('\n- '); }
         }catch(e){ out.textContent = `エラー: ${e.message}`; }
@@ -920,6 +954,7 @@
       function setEcOut(txt){ const el = document.getElementById('ecOut'); if (el) el.textContent = txt||''; }
       async function searchRakutenIchiba(q, appId){
         if (!appId) throw new Error('Rakuten AppID未設定');
+        // 1) Rakuten Ichiba Item Search by keyword (JAN含む)
         const base = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706';
         const params = new URLSearchParams({
           format: 'json',
@@ -938,43 +973,80 @@
         if (j && j.error){ throw new Error(`Rakuten API: ${j.error_description||j.error}`); }
         const itemsV2 = Array.isArray(j?.Items)? j.Items: [];
         const items = itemsV2.length ? itemsV2 : (j.Items||[]).map(w=> w.Item || w.item || w);
-        const top = items.slice(0,10);
-        return top.map(it=>({
+        let out = items.slice(0,10).map(it=>({
           name: it.itemName || it.title || '',
           price: it.itemPrice || it.price || '',
           shop: it.shopName || '',
           url: it.itemUrl || it.url || '',
           desc: it.itemCaption || it.description || ''
         }));
+        // 2) If query looks like JAN and no Item Search hits, fallback to Product Search API (catalog)
+        const isJan = /^\d{8}$|^\d{12}$|^\d{13}$/.test((q||'').trim());
+        if (isJan && out.length === 0){
+          try{
+            const pbase = 'https://app.rakuten.co.jp/services/api/Product/Search/20170426';
+            const p = new URLSearchParams({
+              format: 'json',
+              formatVersion: '2',
+              applicationId: appId,
+              keyword: (q||'').trim(),
+              hits: '10',
+              // limit fields (if supported)
+              elements: 'productName,minPrice,maxPrice,productUrlPC,productCaption'
+            });
+            const purl = `${pbase}?${p.toString()}`;
+            const pr = await fetch(purl, { cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer' });
+            if (pr.ok){
+              const pj = await pr.json();
+              const products = Array.isArray(pj?.Products) ? pj.Products : (Array.isArray(pj?.products)? pj.products: []);
+              out = products.slice(0,10).map(it=>({
+                name: it.productName || it.itemName || it.title || '',
+                // use minPrice if available; fallback to maxPrice/price
+                price: (typeof it.minPrice === 'number') ? it.minPrice : (Number(it.minPrice)||Number(it.maxPrice)||''),
+                shop: '',
+                url: it.productUrlPC || it.itemUrl || it.url || '',
+                desc: it.productCaption || it.itemCaption || it.description || ''
+              }));
+            }
+          }catch(_){ /* ignore fallback errors to keep primary flow stable */ }
+        }
+        return out;
       }
       async function searchYahooShopping(q, appId){
         if (!appId) throw new Error('Yahoo AppID未設定');
-        const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?appid=${encodeURIComponent(appId)}&query=${encodeURIComponent(q)}&hits=10`;
+        const base = 'https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch';
+        const params = new URLSearchParams({ appid: appId, hits: '10' });
+        const qstr = (q||'').trim();
+        const isJan = /^\d{8}$|^\d{12}$|^\d{13}$/.test(qstr);
+        if (isJan) params.set('jan_code', qstr); else params.set('query', qstr);
+        const url = `${base}?${params.toString()}`;
         const r = await fetch(url);
         if (!r.ok) throw new Error('Yahoo APIエラー');
         const j = await r.json();
-        const hits = (j.hits||j.items||[]).slice(0,10);
+        const hits = Array.isArray(j?.hits) ? j.hits.slice(0,10) : [];
         return hits.map(it=>({
-          name: it.name||it.title||'-',
-          price: (it.price&& (it.price._value||it.price))? String(it.price._value||it.price): '',
-          url: it.url||it.link||'',
-          shop: (it.seller&& (it.seller.name||it.seller.sellerName)) || (it.store&&it.store.name) || '',
-          description: it.description||it.explanation||it.summary||''
+          name: it.name || '-',
+          price: (typeof it.price === 'number') ? it.price : (Number(it.price) || ''),
+          url: it.url || '',
+          shop: (it.seller && it.seller.name) || '',
+          description: it.description || ''
         }));
       }
       function extractDevicesFromEcText(a){
         try{
-          const txt = [a.name, a.caption, a.description].filter(Boolean).join(' ');
+          const txt = [a.name, a.caption, a.description, a.desc].filter(Boolean).join(' ');
           const list = (typeof extractDevicesFromText==='function') ? extractDevicesFromText(txt) : [];
           return Array.from(new Set(list)).slice(0,6);
         }catch{ return []; }
       }
       function renderEcResults(rk, yh){
+        const collected = new Set();
         const toLines = (arr)=> arr.map(a=>{
           const p = a.price? ` (¥${a.price})` : '';
           const s = a.shop? ` - ${a.shop}`: '';
           const u = a.url? `\n  ${a.url}`: '';
           const devs = extractDevicesFromEcText(a);
+          for (const d of devs){ collected.add(String(d).trim()); }
           const d  = devs.length? `\n  対応: ${devs.join(', ')}`: '';
           return `• ${a.name}${p}${s}${u}${d}`;
         });
@@ -982,6 +1054,8 @@
         parts.push('Rakuten:'); parts.push(...(rk.length? toLines(rk): ['(No results)']));
         parts.push('');
         parts.push('Yahoo:'); parts.push(...(yh.length? toLines(yh): ['(No results)']));
+        // Save collected devices to state (deduped)
+        try{ state.ecDevices = Array.from(collected).filter(Boolean).slice(0,50); }catch(_){ state.ecDevices = []; }
         return parts.join('\n');
       }
       const ecBtn = document.getElementById('ecSearchBtn'); if (ecBtn) ecBtn.addEventListener('click', async ()=>{
