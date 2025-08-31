@@ -857,6 +857,36 @@
           let p = state.product;
           try{
             if (!factsHasInfo(productToFacts(p||{}))){
+              // If no EC results cached yet, auto-run EC search with current inputs to gather candidates
+              const hasEC = !!(state.ecResults && ((Array.isArray(state.ecResults.rk) && state.ecResults.rk.length) || (Array.isArray(state.ecResults.yh) && state.ecResults.yh.length)));
+              if (!hasEC){
+                try{
+                  const q = bestQueryForEC();
+                  const rakutenId = (document.getElementById('rakutenAppIdInput')?.value||'').trim();
+                  const yahooId = (document.getElementById('yahooAppIdInput')?.value||'').trim();
+                  if (q && (rakutenId || yahooId)){
+                    const [rkRes, yhRes] = await Promise.allSettled([
+                      rakutenId ? searchRakutenIchiba(q, rakutenId) : Promise.resolve([]),
+                      yahooId ? searchYahooShopping(q, yahooId) : Promise.resolve([])
+                    ]);
+                    const rk = rkRes.status==='fulfilled'? rkRes.value: [];
+                    const yh = yhRes.status==='fulfilled'? yhRes.value: [];
+                    // Save raw results
+                    try{ state.ecResults = { rk: Array.isArray(rk)? rk: [], yh: Array.isArray(yh)? yh: [] }; }catch(_){ state.ecResults = { rk:[], yh:[] }; }
+                    // Derive devices from EC texts
+                    try{
+                      const collected = new Set();
+                      const all = [...(state.ecResults.rk||[]), ...(state.ecResults.yh||[])];
+                      for (const a of all){
+                        const devs = extractDevicesFromEcText(a);
+                        for (const d of devs){ const s = String(d||'').trim(); if (s) collected.add(s); }
+                      }
+                      state.ecDevices = Array.from(collected).slice(0,50);
+                    }catch(_){ try{ state.ecDevices = []; }catch(__){} }
+                  }
+                }catch(_){ /* ignore auto EC errors to keep LLM flow */ }
+              }
+              // Build minimal product from EC if primary facts are still insufficient
               const fb = buildFallbackProductFromEC();
               if (fb && factsHasInfo(productToFacts(fb))){ p = fb; }
             }
@@ -902,6 +932,12 @@
           const s = getSettings();
           if (!state.product && s.useOnline){
             state.product = await fetchOnlineProduct(code);
+          }
+          // 3) If still not found, try EC-based minimal product silently
+          if (!state.product){
+            await autoFetchECResultsSilently();
+            const fb = buildFallbackProductFromEC();
+            if (fb && factsHasInfo(productToFacts(fb))){ state.product = fb; }
           }
         }catch(_){ state.product = null; }
         render();
@@ -1090,7 +1126,8 @@
         try{ state.ecDevices = Array.from(collected).filter(Boolean).slice(0,50); }catch(_){ state.ecDevices = []; }
         // Save raw EC results for later minimal-facts fallback
         try{ state.ecResults = { rk: Array.isArray(rk)? rk: [], yh: Array.isArray(yh)? yh: [] }; }catch(_){ state.ecResults = { rk:[], yh:[] }; }
-        return parts.join('\n');
+        const agg = state.ecDevices && state.ecDevices.length ? ['','対応機種(集約):', '- ' + state.ecDevices.join('\n- ')] : [];
+        return parts.join('\n') + (agg.length? ('\n' + agg.join('\n')) : '');
       }
       // Build minimal product object from EC results when primary facts are insufficient
       function buildFallbackProductFromEC(){
@@ -1115,6 +1152,33 @@
           const out = { code: (state.product?.code || code || '').trim(), name: nm, brand:'', category:'', description: clipped, specs:{} };
           return out;
         }catch(_){ return null; }
+      }
+      // Silently fetch EC results and update state without touching UI
+      async function autoFetchECResultsSilently(){
+        try{
+          const q = bestQueryForEC();
+          const rakutenId = (document.getElementById('rakutenAppIdInput')?.value||'').trim();
+          const yahooId = (document.getElementById('yahooAppIdInput')?.value||'').trim();
+          if (!q || (!rakutenId && !yahooId)) return;
+          const [rkRes, yhRes] = await Promise.allSettled([
+            rakutenId ? searchRakutenIchiba(q, rakutenId) : Promise.resolve([]),
+            yahooId ? searchYahooShopping(q, yahooId) : Promise.resolve([])
+          ]);
+          const rk = rkRes.status==='fulfilled'? rkRes.value: [];
+          const yh = yhRes.status==='fulfilled'? yhRes.value: [];
+          // Save raw results
+          try{ state.ecResults = { rk: Array.isArray(rk)? rk: [], yh: Array.isArray(yh)? yh: [] }; }catch(_){ state.ecResults = { rk:[], yh:[] }; }
+          // Derive devices silently
+          try{
+            const collected = new Set();
+            const all = [...(state.ecResults.rk||[]), ...(state.ecResults.yh||[])];
+            for (const a of all){
+              const devs = extractDevicesFromEcText(a);
+              for (const d of devs){ const s = String(d||'').trim(); if (s) collected.add(s); }
+            }
+            state.ecDevices = Array.from(collected).slice(0,50);
+          }catch(_){ /* ignore */ }
+        }catch(_){ /* ignore network errors */ }
       }
       const ecBtn = document.getElementById('ecSearchBtn'); if (ecBtn) ecBtn.addEventListener('click', async ()=>{
         const q = bestQueryForEC(); if (!q){ alert('検索キーワードがありません'); return; }
