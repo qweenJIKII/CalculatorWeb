@@ -175,6 +175,47 @@
         <div class="muted" style="margin-top:4px;">キー/トークン/Client IDは原則保存しません（保存にチェック時のみ端末に保存・トークンは保存しません）。OAuthはGemini専用・Client IDのみ使用（client_secret不要）。</div>
         <div id="aiOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
       </div>
+      <div id="dsCard" class="card">
+        <div class="title2">検索チャット（DeepSeek / OpenRouter）</div>
+        <div class="row" style="gap:6px; flex-wrap:wrap;">
+          <label class="row" style="gap:6px;">
+            <span class="muted">OpenRouter API Key:</span>
+            <input id="dsKeyInput" type="password" placeholder="（保存しません）" style="width:260px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </label>
+          <label class="row" style="gap:6px;">
+            <span class="muted">Model:</span>
+            <select id="dsModel" multiple size="6" style="width:280px;">
+              <option value="deepseek/deepseek-chat-v3.1:free">deepseek/deepseek-chat-v3.1:free</option>
+              <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
+              <option value="openai/gpt-oss-20b:free">openai/gpt-oss-20b:free</option>
+              <option value="z-ai/glm-4.5-air:free">z-ai/glm-4.5-air:free</option>
+              <option value="moonshotai/kimi-k2:free">moonshotai/kimi-k2:free</option>
+              <option value="qwen/qwen3-235b-a22b:free">qwen/qwen3-235b-a22b:free</option>
+            </select>
+          </label>
+          <label class="row" style="gap:6px;">
+            <input id="dsRememberToggle" type="checkbox" />
+            <span class="muted">この端末に保存（APIキー/Model）</span>
+          </label>
+        </div>
+        <div class="row" style="gap:6px; margin-top:6px;">
+          <input id="dsQuery" type="text" placeholder="製品に関する質問を入力（事実ベースで回答）" style="flex:1; min-width:280px;" autocomplete="off" />
+          <button id="dsSendBtn" class="btn" type="button">送信</button>
+        </div>
+        <div class="row" style="gap:12px; align-items:center; margin-top:6px;">
+          <label class="row" style="gap:6px; align-items:center;">
+            <input id="dsReasoningToggle" type="checkbox" />
+            <span class="muted">reasoning表示</span>
+          </label>
+          <label class="row" style="gap:6px; align-items:center;">
+            <input id="dsProxyOnlyToggle" type="checkbox" />
+            <span class="muted">プロキシのみ使用</span>
+          </label>
+          <button id="dsClearBtn" class="btn btn-secondary" type="button">ログクリア</button>
+        </div>
+        <div id="dsChat" class="muted" style="margin-top:8px; white-space:pre-wrap; border:1px solid #ddd; border-radius:6px; padding:8px; min-height:60px;"></div>
+        <div class="muted" style="margin-top:6px; font-size:12px;">Powered by <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a> / DeepSeek</div>
+      </div>
       <div id="cseCard" class="card">
         <div class="title2">対応機種（Googleカスタム検索）</div>
         <div class="row">
@@ -194,6 +235,11 @@
         </div>
         <div id="cseOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
       </div>
+      <div class="row" style="gap:6px; margin-top:8px;">
+        <button id="ddgBtn" class="btn" type="button" title="DuckDuckGo Instant Answerで対応機種候補を抽出">DDGで対応機種を取得</button>
+        <span class="muted" style="font-size:12px;">Results from <a href="https://duckduckgo.com/" target="_blank" rel="noopener">DuckDuckGo</a></span>
+      </div>
+      <div id="ddgOut" class="muted" style="margin-top:8px; white-space:pre-wrap;"></div>
       <div id="specCard" class="card" style="display:none;">
         <div class="title2">仕様</div>
         <table id="specs"></table>
@@ -209,13 +255,14 @@
       const codeParam = (params.get('code')||'').trim();
       const code = codeParam.replace(/\s+/g,'');
       const isLikelyCode = /^\d{8}$|^\d{12}$|^\d{13}$/.test(code);
-      const state = { product:null, ecDevices:[], cseDevices:[], ecResults:{ rk:[], yh:[] } };
+      const state = { product:null, ecDevices:[], cseDevices:[], ddgDevices:[], ecResults:{ rk:[], yh:[] } };
       const SETTINGS_KEY = 'cw_product_settings';
       const HISTORY_KEY = 'cw_product_history_v1';
       const CACHE_KEY = 'cw_product_cache_v1';
       // Optional local persistence (opt-in)
       const AI_STORE = { remember: 'cw_ai_remember', apiKey: 'cw_ai_api_key', clientId: 'cw_ai_client_id' };
       const CSE_STORE = { remember: 'cw_cse_remember', apiKey: 'cw_cse_api_key', cx: 'cw_cse_cx' };
+      const DS_STORE = { remember: 'cw_ds_remember', apiKey: 'cw_ds_api_key', model: 'cw_ds_model', proxyOnly: 'cw_ds_proxy_only' };
       // OAuth session (in-memory only)
       const oauthSession = { accessToken: null, expiresAt: 0, clientId: null };
       function isTokenValid(){ return !!oauthSession.accessToken && Date.now() < oauthSession.expiresAt; }
@@ -511,12 +558,273 @@
       // --- AI Summary (no key persistence) ---
       function getProvider(){ const el = document.getElementById('aiProvider'); return (el?.value||'openai'); }
       function getInputKey(){ const el = document.getElementById('aiKeyInput'); return (el?.value||'').trim(); }
+      // --- DeepSeek(OpenRouter) helpers ---
+      function getDeepSeekKey(){ const el = document.getElementById('dsKeyInput'); return (el?.value||'').trim(); }
+      function getDeepSeekModel(){ const el = document.getElementById('dsModel'); return (el?.value||'deepseek/deepseek-chat-v3.1:free'); }
+      function getDeepSeekModels(){
+        const el = document.getElementById('dsModel');
+        try{
+          const vals = Array.from(el?.selectedOptions||[]).map(o=>o.value).filter(Boolean);
+          if (vals.length) return vals;
+        }catch(_){/* ignore */}
+        const single = el?.value || 'deepseek/deepseek-chat-v3.1:free';
+        return [single];
+      }
+      function persistDSInputsIfNeeded(){
+        try{
+          const remember = !!document.getElementById('dsRememberToggle')?.checked;
+          const keyEl = document.getElementById('dsKeyInput');
+          const modelEl = document.getElementById('dsModel');
+          const proxyOnlyEl = document.getElementById('dsProxyOnlyToggle');
+          if (remember){
+            localStorage.setItem(DS_STORE.remember, '1');
+            if (keyEl) localStorage.setItem(DS_STORE.apiKey, keyEl.value||'');
+            if (modelEl){
+              const arr = Array.from(modelEl.selectedOptions||[]).map(o=>o.value).filter(Boolean);
+              localStorage.setItem(DS_STORE.model, JSON.stringify(arr.length? arr : [modelEl.value||'deepseek/deepseek-chat-v3.1:free']));
+            }
+            if (proxyOnlyEl) localStorage.setItem(DS_STORE.proxyOnly, proxyOnlyEl.checked? '1':'0');
+          }else{
+            localStorage.removeItem(DS_STORE.remember);
+            localStorage.removeItem(DS_STORE.apiKey);
+            localStorage.removeItem(DS_STORE.model);
+            localStorage.removeItem(DS_STORE.proxyOnly);
+          }
+        }catch(_){/* ignore */}
+      }
+      function restoreDSInputsOnLoad(){
+        try{
+          const remember = localStorage.getItem(DS_STORE.remember)==='1';
+          const tgl = document.getElementById('dsRememberToggle'); if (tgl) tgl.checked = !!remember;
+          if (remember){
+            const k = localStorage.getItem(DS_STORE.apiKey)||'';
+            const mraw = localStorage.getItem(DS_STORE.model)||'["deepseek/deepseek-chat-v3.1:free"]';
+            let models = [];
+            try{
+              models = JSON.parse(mraw);
+              if (!Array.isArray(models)) models = [String(models||'').trim()].filter(Boolean);
+            }catch(_){ models = [String(mraw||'').trim()].filter(Boolean); }
+            const keyEl = document.getElementById('dsKeyInput'); if (keyEl && !keyEl.value) keyEl.value = k;
+            const modelEl = document.getElementById('dsModel'); if (modelEl){
+              const set = new Set(models);
+              for (const opt of Array.from(modelEl.options||[])) { opt.selected = set.has(opt.value); }
+            }
+            const pEl = document.getElementById('dsProxyOnlyToggle'); if (pEl) { const pv = localStorage.getItem(DS_STORE.proxyOnly)==='1'; pEl.checked = !!pv; }
+          }
+          // restore reasoning toggle state
+          const showR = localStorage.getItem('cw_ds_show_reasoning') === '1';
+          const rEl = document.getElementById('dsReasoningToggle'); if (rEl) rEl.checked = !!showR;
+        }catch(_){/* ignore */}
+      }
+      // Stable anonymous user id for OpenRouter 'user' field (abuse prevention / analytics friendly)
+      function getAnonUserId(){
+        try{
+          const KEY = 'cw_anon_user_id';
+          let v = localStorage.getItem(KEY);
+          if (!v){
+            // Simple UUID v4-ish generator (non-crypto)
+            v = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
+              const r = Math.random()*16|0, s = c==='x'? r : (r&0x3|0x8); return s.toString(16);
+            });
+            localStorage.setItem(KEY, v);
+          }
+          return v;
+        }catch(_){ return 'anon-local'; }
+      }
+      function appendDsChat(role, text){
+        const box = document.getElementById('dsChat'); if (!box) return;
+        const who = role==='user' ? 'あなた' : (role==='assistant'?'Answer':'system');
+        const line = `[${who}] ${text}`;
+        box.textContent = (box.textContent? (box.textContent+"\n"):"") + line;
+        try{ box.scrollTop = box.scrollHeight; }catch(_){/* ignore */}
+      }
+      // Streaming helpers (defer headers until first chunk of each type)
+      let dsStreamState = { printedAnswerHeader:false, printedReasoningHeader:false };
+      function appendDsStreamStart(){ dsStreamState = { printedAnswerHeader:false, printedReasoningHeader:false }; }
+      function ensureDsAnswerHeader(){ const box = document.getElementById('dsChat'); if (box && !dsStreamState.printedAnswerHeader){ box.textContent += (box.textContent? "\n":"") + "[Answer] "; dsStreamState.printedAnswerHeader = true; try{ box.scrollTop = box.scrollHeight; }catch(_){ } } }
+      function ensureDsReasoningHeader(){ const box = document.getElementById('dsChat'); if (box && !dsStreamState.printedReasoningHeader){ box.textContent += (box.textContent? "\n":"") + "[Reasoning] "; dsStreamState.printedReasoningHeader = true; try{ box.scrollTop = box.scrollHeight; }catch(_){ } } }
+      function appendDsStreamChunk(t){ const box = document.getElementById('dsChat'); if (box) { box.textContent += String(t||''); try{ box.scrollTop = box.scrollHeight; }catch(_){ } } }
+      function appendDsStreamEnd(){ /* no-op */ }
+      function appendDsHeading(label){ const box = document.getElementById('dsChat'); if (!box) return; box.textContent += (box.textContent? "\n":"") + `[Model] ${label}`; try{ box.scrollTop = box.scrollHeight; }catch(_){ } }
+      function handleDsClear(){ const box = document.getElementById('dsChat'); if (box) box.textContent=''; }
+      function persistDsReasoningToggle(){ try{ const el = document.getElementById('dsReasoningToggle'); if (el) localStorage.setItem('cw_ds_show_reasoning', el.checked? '1':'0'); }catch(_){/* ignore */} }
+      function buildDeepSeekSystemPrompt(){
+        // Strict: Only use provided facts. No guessing, no external browsing.
+        return (
+          'あなたは製品ページ専用の検索チャットボットです。' +
+          ' 提供されたfactsだけを根拠に、日本語で簡潔に回答してください。' +
+          ' 不明な点は不明と答え、推測・憶測・外部参照は行わないでください。' +
+          ' 対応機種はfacts.supported_devicesに含まれるもののみを列挙し、それ以外は書かないでください。'
+        );
+      }
+      async function callDeepSeekChat(query, modelOverride){
+        const key = getDeepSeekKey();
+        const model = modelOverride || getDeepSeekModel();
+        const facts = productToFacts(state.product || {});
+        const sys = buildDeepSeekSystemPrompt();
+        const messages = [
+          { role: 'system', content: sys },
+          { role: 'system', content: 'facts:' + JSON.stringify(facts) },
+          { role: 'user', content: String(query||'').trim() }
+        ];
+        const url = 'https://openrouter.ai/api/v1/chat/completions';
+        const body = { model, messages, temperature: 0.1, max_tokens: 800, user: getAnonUserId() };
+        // 1) Try proxy first (no Authorization from client)
+        try{
+          const pres = await fetch('/api/openrouter-chat', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body), mode:'cors', cache:'no-store' });
+          if (pres.ok){ const json = await pres.json(); const txt = json?.choices?.[0]?.message?.content || ''; return String(txt||'').trim(); }
+        }catch(_){ /* fall through to direct */ }
+        // 2) Fallback to direct OpenRouter (requires user key)
+        const proxyOnly = !!document.getElementById('dsProxyOnlyToggle')?.checked;
+        if (proxyOnly){ throw new Error('プロキシのみ使用が有効です。バックエンドに接続できないため処理を中止しました。'); }
+        if (!key){ throw new Error('プロキシに接続できません。APIキーを入力するか、バックエンドサーバ（server.js）を起動してください。'); }
+        const headers = { 'Authorization': 'Bearer '+ key, 'Content-Type':'application/json' };
+        try{ headers['HTTP-Referer'] = location.origin + location.pathname; headers['X-Title'] = 'Calculator Web Product Chat'; }catch(_){/* ignore */}
+        const dres = await fetch(url, { method:'POST', headers, body: JSON.stringify(body), mode:'cors', cache:'no-store' });
+        if (!dres.ok){
+          let msg = dres.statusText || 'Error';
+          try{ msg = await dres.text(); }catch(_){/* ignore */}
+          if (dres.status === 429){
+            const ra = dres.headers?.get('Retry-After');
+            const wait = ra ? `（Retry-After: ${ra}s）` : '';
+            throw new Error(`レート制限(429)。しばらく待って再試行してください ${wait}`);
+          }
+          throw new Error(`HTTP ${dres.status} ${msg}`);
+        }
+        const djson = await dres.json();
+        const dtxt = djson?.choices?.[0]?.message?.content || '';
+        return String(dtxt||'').trim();
+      }
+      // Streaming version using SSE-like chunks over fetch
+      async function callDeepSeekChatStream(query, modelOverride){
+        const key = getDeepSeekKey();
+        const model = modelOverride || getDeepSeekModel();
+        const facts = productToFacts(state.product || {});
+        const sys = buildDeepSeekSystemPrompt();
+        const messages = [
+          { role: 'system', content: sys },
+          { role: 'system', content: 'facts:' + JSON.stringify(facts) },
+          { role: 'user', content: String(query||'').trim() }
+        ];
+        const url = 'https://openrouter.ai/api/v1/chat/completions';
+        const body = { model, messages, temperature: 0.1, max_tokens: 800, user: getAnonUserId(), stream: true };
+        // 1) Try proxy first
+        try{
+          const pres = await fetch('/api/openrouter-chat', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body), mode:'cors', cache:'no-store' });
+          if (pres.ok){
+            const preader = pres.body?.getReader ? pres.body.getReader() : null;
+            if (!preader){ const full = await callDeepSeekChat(query, model); appendDsChat('assistant', full); return full; }
+            appendDsStreamStart();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            let finalText = '';
+            for(;;){
+              const {done, value} = await preader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream:true });
+              const parts = buffer.split('\n\n');
+              buffer = parts.pop() || '';
+              for (const part of parts){
+                const lines = part.split('\n');
+                for (const line of lines){
+                  const s = line.trim();
+                  if (!s || s.startsWith(':') || s.startsWith('event:')) continue;
+                  if (s.startsWith('data:')){
+                    const payload = s.slice(5).trim();
+                    if (payload === '[DONE]') { appendDsStreamEnd(); continue; }
+                    try{
+                      const j = JSON.parse(payload);
+                      const delta = j?.choices?.[0]?.delta;
+                      const rchunk = delta?.reasoning_content || '';
+                      if (rchunk && document.getElementById('dsReasoningToggle')?.checked){ ensureDsReasoningHeader(); appendDsStreamChunk(rchunk); }
+                      const chunk = delta?.content || '';
+                      if (chunk){ ensureDsAnswerHeader(); finalText += chunk; appendDsStreamChunk(chunk); }
+                    }catch(_){ }
+                  }
+                }
+              }
+            }
+            appendDsStreamEnd();
+            return finalText.trim();
+          }
+        }catch(_){ /* fall through to direct */ }
+        // 2) Fallback to direct OpenRouter
+        const proxyOnly2 = !!document.getElementById('dsProxyOnlyToggle')?.checked;
+        if (proxyOnly2){ throw new Error('プロキシのみ使用が有効です。バックエンドに接続できないため処理を中止しました。'); }
+        if (!key){ throw new Error('プロキシに接続できません。APIキーを入力するか、バックエンドサーバ（server.js）を起動してください。'); }
+        const headers = { 'Authorization': 'Bearer '+ key, 'Content-Type':'application/json' };
+        try{ headers['HTTP-Referer'] = location.origin + location.pathname; headers['X-Title'] = 'Calculator Web Product Chat'; }catch(_){/* ignore */}
+        const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body), mode:'cors', cache:'no-store' });
+        if (!res.ok){
+          let msg = res.statusText || 'Error';
+          try{ msg = await res.text(); }catch(_){/* ignore */}
+          if (res.status === 429){
+            const ra = res.headers?.get('Retry-After');
+            const wait = ra ? `（Retry-After: ${ra}s）` : '';
+            throw new Error(`レート制限(429)。しばらく待って再試行してください ${wait}`);
+          }
+          throw new Error(`HTTP ${res.status} ${msg}`);
+        }
+        const reader = res.body?.getReader ? res.body.getReader() : null;
+        if (!reader){ const full = await callDeepSeekChat(query, model); appendDsChat('assistant', full); return full; }
+        appendDsStreamStart();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let finalText = '';
+        for(;;){
+          const {done, value} = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream:true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+          for (const part of parts){
+            const lines = part.split('\n');
+            for (const line of lines){
+              const s = line.trim();
+              if (!s || s.startsWith(':') || s.startsWith('event:')) continue; // ignore comments / other events
+              if (s.startsWith('data:')){
+                const payload = s.slice(5).trim();
+                if (payload === '[DONE]') { appendDsStreamEnd(); continue; }
+                try{
+                  const j = JSON.parse(payload);
+                  const delta = j?.choices?.[0]?.delta;
+                  const rchunk = delta?.reasoning_content || '';
+                  if (rchunk && document.getElementById('dsReasoningToggle')?.checked){
+                    ensureDsReasoningHeader();
+                    appendDsStreamChunk(rchunk);
+                  }
+                  const chunk = delta?.content || '';
+                  if (chunk){ ensureDsAnswerHeader(); finalText += chunk; appendDsStreamChunk(chunk); }
+                }catch(_){ /* ignore parse errors */ }
+              }
+            }
+          }
+        }
+        appendDsStreamEnd();
+        return finalText.trim();
+      }
+      async function handleDsSend(){
+        const inp = document.getElementById('dsQuery'); if (!inp) return;
+        const q = (inp.value||'').trim(); if (!q){ inp.focus(); return; }
+        appendDsChat('user', q);
+        const btn = document.getElementById('dsSendBtn'); if (btn) { btn.disabled = true; }
+        try{
+          // Multi-model: run sequentially for each selected model
+          const models = getDeepSeekModels();
+          for (const m of models){
+            appendDsHeading(m);
+            await callDeepSeekChatStream(q, m);
+          }
+        }catch(e){ appendDsChat('assistant', `エラー: ${e.message}`); }
+        finally{ if (btn) btn.disabled = false; }
+      }
       function getSupportedDevices(){
         try{
           const a = Array.isArray(state.ecDevices)? state.ecDevices: [];
           const b = Array.isArray(state.cseDevices)? state.cseDevices: [];
+          const c = Array.isArray(state.ddgDevices)? state.ddgDevices: [];
           const set = new Set();
-          for (const x of [...a, ...b]){ const s = String(x||'').trim(); if (s) set.add(s); }
+          for (const x of [...a, ...b, ...c]){ const s = String(x||'').trim(); if (s) set.add(s); }
           return Array.from(set).slice(0,50);
         }catch(_){ return []; }
       }
@@ -847,6 +1155,61 @@
         }
         return Array.from(found);
       }
+      // --- DuckDuckGo Instant Answer (no key) ---
+      function jsonpRequest(url, cbParam='callback', timeoutMs=8000){
+        return new Promise((resolve, reject)=>{
+          try{
+            const cbName = `__ddg_cb_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
+            const sep = url.includes('?') ? '&' : '?';
+            const full = `${url}${sep}${cbParam}=${encodeURIComponent(cbName)}`;
+            let timed = false;
+            const to = window.setTimeout(()=>{ timed=true; cleanup(); reject(new Error('JSONP timeout')); }, timeoutMs);
+            function cleanup(){ try{ window[cbName]=undefined; delete window[cbName]; }catch{} if(s&&s.parentNode) s.parentNode.removeChild(s); window.clearTimeout(to); }
+            window[cbName] = (data)=>{ if(timed) return; cleanup(); resolve(data); };
+            const s = document.createElement('script'); s.src = full; s.async = true; s.onerror = ()=>{ if(timed) return; cleanup(); reject(new Error('JSONP error')); };
+            document.head.appendChild(s);
+          }catch(e){ reject(e); }
+        });
+      }
+      async function fetchDuckDuckGoIA(query){
+        const base = 'https://api.duckduckgo.com/';
+        const params = new URLSearchParams({ q: query, format:'json', no_redirect:'1', no_html:'1', pretty:'0', t:'cw_product', kl:'jp-jp' });
+        const url = `${base}?${params.toString()}`;
+        try{
+          const res = await fetch(url, { cache:'no-store' });
+          if (res.ok) return await res.json();
+        }catch(_){ /* try JSONP below */ }
+        // Fallback to JSONP for environments without proper CORS
+        return await jsonpRequest(url, 'callback');
+      }
+      function parseDDGTexts(json){
+        try{
+          const texts = [];
+          if (json){
+            if (typeof json.AbstractText === 'string') texts.push(json.AbstractText);
+            if (typeof json.Heading === 'string') texts.push(json.Heading);
+            if (Array.isArray(json.RelatedTopics)){
+              for (const rt of json.RelatedTopics){
+                if (rt && Array.isArray(rt.Topics)){
+                  for (const t of rt.Topics){ if (typeof t.Text==='string') texts.push(t.Text); }
+                } else if (rt && typeof rt.Text==='string') {
+                  texts.push(rt.Text);
+                }
+              }
+            }
+            if (Array.isArray(json.Results)){
+              for (const r of json.Results){ if (typeof r.Text==='string') texts.push(r.Text); }
+            }
+          }
+          return texts;
+        }catch(_){ return []; }
+      }
+      async function searchSupportedDevicesByDDG(query){
+        const json = await fetchDuckDuckGoIA(query);
+        const texts = parseDDGTexts(json);
+        const devices = extractDevicesFromText(texts.join(' \n '));
+        return Array.from(new Set(devices)).slice(0,50);
+      }
       async function handleLocalSummary(){ const out = document.getElementById('aiOut'); const p = state.product; out.textContent = genLocalSummary(p); }
       async function handleLLMSummary(){
         const out = document.getElementById('aiOut');
@@ -885,6 +1248,11 @@
                     }catch(_){ try{ state.ecDevices = []; }catch(__){} }
                   }
                 }catch(_){ /* ignore auto EC errors to keep LLM flow */ }
+              }
+              // Also enrich supported devices via DDG silently when not yet populated
+              const hasDDG = Array.isArray(state.ddgDevices) && state.ddgDevices.length;
+              if (!hasDDG){
+                try{ await autoFetchDDGSilently(); }catch(_){ /* ignore */ }
               }
               // Build minimal product from EC if primary facts are still insufficient
               const fb = buildFallbackProductFromEC();
@@ -936,6 +1304,8 @@
           // 3) If still not found, try EC-based minimal product silently
           if (!state.product){
             await autoFetchECResultsSilently();
+            // Also try DDG silently to collect supported devices candidates
+            await autoFetchDDGSilently();
             const fb = buildFallbackProductFromEC();
             if (fb && factsHasInfo(productToFacts(fb))){ state.product = fb; }
           }
@@ -976,6 +1346,27 @@
           else { out.textContent = '対応機種:\n- ' + list.slice(0,50).join('\n- '); }
         }catch(e){ out.textContent = `エラー: ${e.message}`; }
       });
+      const ddgBtn = document.getElementById('ddgBtn'); if (ddgBtn) ddgBtn.addEventListener('click', async()=>{
+        const out = document.getElementById('ddgOut');
+        out.textContent = '検索中…';
+        try{
+          const jan = (state.product?.code || code || '').trim();
+          const q = `${jan} 対応機種`;
+          const list = await searchSupportedDevicesByDDG(q);
+          try{ state.ddgDevices = Array.from(new Set((list||[]).map(x=> String(x||'').trim()))).filter(Boolean).slice(0,50); }catch(_){ state.ddgDevices = []; }
+          if (!list.length){ out.textContent = '対応機種は見つかりませんでした。'; }
+          else { out.textContent = '対応機種:\n- ' + state.ddgDevices.join('\n- '); }
+        }catch(e){ out.textContent = `エラー: ${e.message}`; }
+      });
+      // DS inputs & handlers
+      const dsRememberTgl = document.getElementById('dsRememberToggle'); if (dsRememberTgl) dsRememberTgl.addEventListener('change', persistDSInputsIfNeeded);
+      const dsKeyEl = document.getElementById('dsKeyInput'); if (dsKeyEl) dsKeyEl.addEventListener('input', ()=>{ persistDSInputsIfNeeded(); });
+      const dsModelEl = document.getElementById('dsModel'); if (dsModelEl) dsModelEl.addEventListener('change', ()=>{ persistDSInputsIfNeeded(); });
+      const dsSendBtn = document.getElementById('dsSendBtn'); if (dsSendBtn) dsSendBtn.addEventListener('click', handleDsSend);
+      const dsQueryEl = document.getElementById('dsQuery'); if (dsQueryEl) dsQueryEl.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); handleDsSend(); }});
+      const dsClearBtn = document.getElementById('dsClearBtn'); if (dsClearBtn) dsClearBtn.addEventListener('click', handleDsClear);
+      const dsReasonTgl = document.getElementById('dsReasoningToggle'); if (dsReasonTgl) dsReasonTgl.addEventListener('change', persistDsReasoningToggle);
+      const dsProxyOnlyTgl = document.getElementById('dsProxyOnlyToggle'); if (dsProxyOnlyTgl) dsProxyOnlyTgl.addEventListener('change', persistDSInputsIfNeeded);
       const cseRememberTgl = document.getElementById('cseRememberToggle'); if (cseRememberTgl) cseRememberTgl.addEventListener('change', persistCSEInputsIfNeeded);
       const cseKeyEl = document.getElementById('cseKeyInput'); if (cseKeyEl) cseKeyEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
       const cseCxEl = document.getElementById('cseCxInput'); if (cseCxEl) cseCxEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
@@ -1179,6 +1570,17 @@
             state.ecDevices = Array.from(collected).slice(0,50);
           }catch(_){ /* ignore */ }
         }catch(_){ /* ignore network errors */ }
+      }
+      // Silently fetch DDG IA texts and update ddgDevices without touching UI
+      async function autoFetchDDGSilently(){
+        try{
+          const qBase = bestQueryForEC();
+          const jan = (state.product?.code || code || '').trim();
+          const q = ((qBase || jan) ? `${qBase || jan} 対応機種` : '').trim();
+          if (!q) return;
+          const list = await searchSupportedDevicesByDDG(q);
+          try{ state.ddgDevices = Array.from(new Set((list||[]).map(x=> String(x||'').trim()))).filter(Boolean).slice(0,50); }catch(_){ state.ddgDevices = []; }
+        }catch(_){ /* ignore */ }
       }
       const ecBtn = document.getElementById('ecSearchBtn'); if (ecBtn) ecBtn.addEventListener('click', async ()=>{
         const q = bestQueryForEC(); if (!q){ alert('検索キーワードがありません'); return; }
@@ -1430,6 +1832,7 @@
       renderHistory();
       applyStoredAIInputs();
       applyStoredCSEInputs();
+      restoreDSInputsOnLoad();
       updateAIAuthUI();
       load();
     })();

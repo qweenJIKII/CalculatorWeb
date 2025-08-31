@@ -1,0 +1,16 @@
+# Netlify configuration for CalculatorWeb-Repo
+
+# Map Edge Function to API route
+[[edge_functions]]
+function = "openrouter-chat"
+path = "/api/openrouter-chat"
+
+# Optional: set default directory to publish (this folder)
+[build]
+publish = "."
+
+# Ensure no caching for API responses
+[[headers]]
+for = "/api/openrouter-chat"
+[headers.values]
+Cache-Control = "no-cache, no-store, must-revalidate"
