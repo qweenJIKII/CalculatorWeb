@@ -209,7 +209,7 @@
       const codeParam = (params.get('code')||'').trim();
       const code = codeParam.replace(/\s+/g,'');
       const isLikelyCode = /^\d{8}$|^\d{12}$|^\d{13}$/.test(code);
-      const state = { product:null, ecDevices:[], cseDevices:[] };
+      const state = { product:null, ecDevices:[], cseDevices:[], ecResults:{ rk:[], yh:[] } };
       const SETTINGS_KEY = 'cw_product_settings';
       const HISTORY_KEY = 'cw_product_history_v1';
       const CACHE_KEY = 'cw_product_cache_v1';
@@ -538,6 +538,18 @@
           supported_devices: getSupportedDevices()
         };
       }
+      function factsHasInfo(f){
+        try{
+          if (!f) return false;
+          if ((f.name||'').trim()) return true;
+          if ((f.description||'').trim()) return true;
+          if ((f.category||'').trim()) return true;
+          if ((f.brand||'').trim()) return true;
+          if (Array.isArray(f.supported_devices) && f.supported_devices.length) return true;
+          if (f.price!=null) return true;
+          return false;
+        }catch(_){ return false; }
+      }
       function genLocalSummary(p){
         const f = productToFacts(p);
         const title = f.name || '製品';
@@ -564,6 +576,7 @@
       async function genOpenAISummary(p, key){
         if (!key) throw new Error('APIキーが設定されていません');
         const f = productToFacts(p);
+        if (!factsHasInfo(f)) return '情報が不足しています。';
         const prompt = `以下の製品データ(facts)のみを根拠に、日本語で要約してください。外部知識や推測は一切禁止です。\n`+
           `必ず次の形式で: \n`+
           `【説明】…\n`+
@@ -572,7 +585,8 @@
           `【価格】…(分かれば)\n`+
           `厳守事項: factsに存在しない内容は書かない。カテゴリ/製品種別は facts.category や facts.device_type 等に一致する場合のみ言及。\n`+
           `禁止: 電池/バッテリー/充電/容量/電圧/電流/ケーブル/アダプタ等の言及は、facts内に明示がある場合のみ。対応機種は facts.supported_devices のみ。\n`+
-          JSON.stringify(f);
+          `出力は純テキストのみ。JSONやコードブロック・注釈は出力しない。\n`+
+          `facts: ` + JSON.stringify(f);
         const res = await fetch('https://api.openai.com/v1/chat/completions',{
           method:'POST',
           headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}`, 'Cache-Control':'no-store' },
@@ -582,7 +596,7 @@
           mode:'cors',
           body: JSON.stringify({
             model: 'gpt-3.5-turbo',
-            messages: [ { role:'system', content:'You are a strictly extractive Japanese assistant. Use ONLY the provided facts. Never invent, infer, or assume.' }, { role:'user', content: prompt } ],
+            messages: [ { role:'system', content:'You are a strictly extractive Japanese assistant. Output PLAIN TEXT ONLY (no JSON, no code blocks). Use ONLY the provided facts. Never invent, infer, or assume.' }, { role:'user', content: prompt } ],
             temperature: 0.0
           })
         });
@@ -594,6 +608,7 @@
       async function genGeminiSummary(p, key){
         if (!key) throw new Error('APIキーが設定されていません');
         const f = productToFacts(p);
+        if (!factsHasInfo(f)) return '情報が不足しています。';
         const prompt = `以下の製品データ(facts)のみを根拠に、日本語で要約してください。外部知識や推測は一切禁止です。\n`+
           `必ず次の形式で: \n`+
           `【説明】…\n`+
@@ -602,7 +617,8 @@
           `【価格】…(分かれば)\n`+
           `厳守事項: factsに存在しない内容は書かない。カテゴリ/製品種別は facts.category や facts.device_type 等に一致する場合のみ言及。\n`+
           `禁止: 電池/バッテリー/充電/容量/電圧/電流/ケーブル/アダプタ等の言及は、facts内に明示がある場合のみ。対応機種は facts.supported_devices のみ。\n`+
-          JSON.stringify(f);
+          `出力は純テキストのみ。JSONやコードブロック・注釈は出力しない。\n`+
+          `facts: ` + JSON.stringify(f);
         const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
         const res = await fetch(url, {
           method:'POST',
@@ -624,6 +640,7 @@
       async function genGeminiSummaryOAuth(p, accessToken){
         if (!accessToken) throw new Error('アクセストークンがありません');
         const f = productToFacts(p);
+        if (!factsHasInfo(f)) return '情報が不足しています。';
         const prompt = `以下の製品データ(facts)のみを根拠に、日本語で要約してください。外部知識や推測は一切禁止です。\n`+
           `必ず次の形式で: \n`+
           `【説明】…\n`+
@@ -632,7 +649,8 @@
           `【価格】…(分かれば)\n`+
           `厳守事項: factsに存在しない内容は書かない。カテゴリ/製品種別は facts.category や facts.device_type 等に一致する場合のみ言及。\n`+
           `禁止: 電池/バッテリー/充電/容量/電圧/電流/ケーブル/アダプタ等の言及は、facts内に明示がある場合のみ。対応機種は facts.supported_devices のみ。\n`+
-          JSON.stringify(f);
+          `出力は純テキストのみ。JSONやコードブロック・注釈は出力しない。\n`+
+          `facts: ` + JSON.stringify(f);
         const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
         const res = await fetch(url, {
           method:'POST',
@@ -835,7 +853,14 @@
         out.textContent = '生成中…';
         try{
           const provider = getProvider();
-          const p = state.product;
+          // Prefer real product; if insufficient facts, fallback to EC-derived minimal facts
+          let p = state.product;
+          try{
+            if (!factsHasInfo(productToFacts(p||{}))){
+              const fb = buildFallbackProductFromEC();
+              if (fb && factsHasInfo(productToFacts(fb))){ p = fb; }
+            }
+          }catch(_){ /* ignore */ }
           let txt = '';
           if (provider === 'gemini'){
             const authSel = document.getElementById('aiAuth');
@@ -1063,7 +1088,33 @@
         parts.push('Yahoo:'); parts.push(...(yh.length? toLines(yh): ['(No results)']));
         // Save collected devices to state (deduped)
         try{ state.ecDevices = Array.from(collected).filter(Boolean).slice(0,50); }catch(_){ state.ecDevices = []; }
+        // Save raw EC results for later minimal-facts fallback
+        try{ state.ecResults = { rk: Array.isArray(rk)? rk: [], yh: Array.isArray(yh)? yh: [] }; }catch(_){ state.ecResults = { rk:[], yh:[] }; }
         return parts.join('\n');
+      }
+      // Build minimal product object from EC results when primary facts are insufficient
+      function buildFallbackProductFromEC(){
+        try{
+          const rk = (state.ecResults && Array.isArray(state.ecResults.rk)) ? state.ecResults.rk : [];
+          const yh = (state.ecResults && Array.isArray(state.ecResults.yh)) ? state.ecResults.yh : [];
+          const all = [...rk, ...yh];
+          if (!all.length) return null;
+          // Score candidates: prefer entries with longer description/caption; tie-break by name length
+          const score = (a)=>{
+            const d = (a.desc || a.caption || a.description || '').trim();
+            const n = (a.name || '').trim();
+            return (d.length||0) * 2 + (n.length||0);
+          };
+          let best = null, bestScore = -1;
+          for (const a of all){ const sc = score(a); if (sc > bestScore){ best = a; bestScore = sc; } }
+          if (!best) best = all[0];
+          const rawDesc = (best.desc || best.caption || best.description || '').replace(/\s+/g,' ').trim();
+          const clipped = rawDesc ? rawDesc.slice(0, 800) : '';
+          const nm = (best.name || '').trim();
+          // Minimal product; other fields left empty. supported_devices are injected via productToFacts() from state.
+          const out = { code: (state.product?.code || code || '').trim(), name: nm, brand:'', category:'', description: clipped, specs:{} };
+          return out;
+        }catch(_){ return null; }
       }
       const ecBtn = document.getElementById('ecSearchBtn'); if (ecBtn) ecBtn.addEventListener('click', async ()=>{
         const q = bestQueryForEC(); if (!q){ alert('検索キーワードがありません'); return; }
