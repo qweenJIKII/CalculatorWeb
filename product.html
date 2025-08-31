@@ -62,6 +62,34 @@
         </div>
         <p id="desc" style="margin:10px 0 0;">説明</p>
       </div>
+      <div class="card">
+        <div class="title2">JANコード入力</div>
+        <div class="row" style="gap:8px; align-items:center;">
+          <label class="row" style="gap:6px;">
+            <span class="muted">手動:</span>
+            <input id="janInput" type="text" inputmode="numeric" placeholder="JAN/EAN/UPC（8/12/13桁）" style="width:220px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </label>
+          <button id="janLoadBtn" class="btn" type="button">読込</button>
+          <label class="row" style="gap:6px;">
+            <span class="muted">自動:</span>
+            <input id="janAutoInput" type="text" inputmode="numeric" placeholder="スキャン/貼付で自動（8/12/13桁で実行）" style="width:280px;" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </label>
+        </div>
+        <div class="row" style="gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+          <button id="digitImageBtn" class="btn" type="button">画像から数字を読み取り</button>
+          <input id="digitImageInput" type="file" accept="image/*" capture="environment" style="display:none;" />
+          <button id="digitCameraBtn" class="btn" type="button">カメラで読み取り</button>
+          <span id="ocrStatus" class="muted"></span>
+        </div>
+        <div id="digitCameraPanel" class="col" style="display:none; gap:8px; margin-top:8px;">
+          <video id="digitVideo" autoplay playsinline muted style="width:320px; max-width:100%; background:#000; border-radius:6px;"></video>
+          <div class="row" style="gap:8px; align-items:center;">
+            <button id="digitCamStartBtn" class="btn" type="button">開始</button>
+            <button id="digitCamStopBtn" class="btn" type="button">停止</button>
+            <span class="muted">バーコード検出優先／非対応端末はOCRに自動切替</span>
+          </div>
+        </div>
+      </div>
       <div id="settingsCard" class="card">
         <div class="title2">設定</div>
         <label class="row" style="gap:8px;">
@@ -811,6 +839,138 @@
       const cseRememberTgl = document.getElementById('cseRememberToggle'); if (cseRememberTgl) cseRememberTgl.addEventListener('change', persistCSEInputsIfNeeded);
       const cseKeyEl = document.getElementById('cseKeyInput'); if (cseKeyEl) cseKeyEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
       const cseCxEl = document.getElementById('cseCxInput'); if (cseCxEl) cseCxEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
+      // --- JAN manual/auto inputs ---
+      function digitsOnly(s){ return (s||'').replace(/\D+/g,''); }
+      function isValidJanDigits(d){ return /^\d{8}$|^\d{12}$|^\d{13}$/.test(d); }
+      function navigateToProduct(d){ const base = location.pathname; location.href = `${base}?code=${encodeURIComponent(d)}`; }
+      const janBtn = document.getElementById('janLoadBtn'); if (janBtn) janBtn.addEventListener('click', ()=>{
+        const el = document.getElementById('janInput'); const v = digitsOnly(el?.value||'');
+        if (isValidJanDigits(v)) navigateToProduct(v); else alert('8/12/13桁の数字（JAN/EAN/UPC）を入力してください');
+      });
+      const janInputEl = document.getElementById('janInput'); if (janInputEl){
+        if (isLikelyCode) janInputEl.value = code;
+        janInputEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); janBtn?.click(); } });
+      }
+      const janAutoEl = document.getElementById('janAutoInput'); if (janAutoEl){
+        let janTimer = null;
+        const tryAuto = ()=>{ const v = digitsOnly(janAutoEl.value); if (isValidJanDigits(v)) navigateToProduct(v); };
+        const debounceAuto = ()=>{ if (janTimer) clearTimeout(janTimer); janTimer = setTimeout(tryAuto, 250); };
+        ['input','paste','change'].forEach(ev=> janAutoEl.addEventListener(ev, debounceAuto));
+        janAutoEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); tryAuto(); } });
+      }
+      // --- Digit OCR & Camera reading ---
+      const ocrStatusEl = document.getElementById('ocrStatus');
+      function setOcrStatus(msg){ if (ocrStatusEl) ocrStatusEl.textContent = msg || ''; }
+      function ensureScript(src){
+        return new Promise((resolve, reject)=>{
+          const existed = !!document.querySelector(`script[src="${src}"]`);
+          if (existed){ resolve(); return; }
+          const s = document.createElement('script'); s.src = src; s.async = true;
+          s.onload = ()=> resolve(); s.onerror = ()=> reject(new Error('Failed to load script'));
+          document.head.appendChild(s);
+        });
+      }
+      async function loadTesseract(){
+        if (!window.Tesseract){
+          setOcrStatus('OCRエンジン読込中...');
+          await ensureScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
+        }
+      }
+      function extractDigitSeqs(text){ return (text||'').match(/\d{5,20}/g) || []; }
+      function pickBestCandidate(arr){
+        if (!arr || !arr.length) return '';
+        const uniq = Array.from(new Set(arr));
+        const pref = [13,12,8];
+        for (const p of pref){ const f = uniq.find(x=> x.length===p); if (f) return f; }
+        return uniq.sort((a,b)=> b.length - a.length)[0];
+      }
+      async function ocrImageAndNavigate(file){
+        try{
+          setOcrStatus('OCR処理中...');
+          await loadTesseract();
+          const res = await window.Tesseract.recognize(file, 'eng');
+          const txt = res?.data?.text || '';
+          const cand = pickBestCandidate(extractDigitSeqs(txt));
+          if (isValidJanDigits(cand)) { setOcrStatus(''); navigateToProduct(cand); }
+          else { setOcrStatus('数字が見つかりませんでした'); }
+        }catch(e){ setOcrStatus('OCRエラー: '+ e.message); }
+      }
+      const imgBtn = document.getElementById('digitImageBtn');
+      const imgInput = document.getElementById('digitImageInput');
+      if (imgBtn && imgInput){
+        imgBtn.addEventListener('click', ()=> imgInput.click());
+        imgInput.addEventListener('change', ()=>{
+          const f = imgInput.files && imgInput.files[0];
+          if (f) ocrImageAndNavigate(f);
+        });
+      }
+      // Camera reading
+      const camPanel = document.getElementById('digitCameraPanel');
+      const camBtn = document.getElementById('digitCameraBtn');
+      const camStartBtn = document.getElementById('digitCamStartBtn');
+      const camStopBtn = document.getElementById('digitCamStopBtn');
+      const videoEl = document.getElementById('digitVideo');
+      let camStream = null; let rafId = 0; let scanning = false; let navigatingFlag = false;
+      let detector = null; let ocrInterval = 0; let ocrBusy = false;
+      function stopCamera(){
+        scanning = false; navigatingFlag = false;
+        if (rafId) cancelAnimationFrame(rafId); rafId = 0;
+        if (ocrInterval) { clearInterval(ocrInterval); ocrInterval = 0; }
+        if (camStream){ camStream.getTracks().forEach(t=> t.stop()); camStream = null; }
+        setOcrStatus('');
+      }
+      async function startCamera(){
+        try{
+          camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+          videoEl.srcObject = camStream; await videoEl.play();
+          scanning = true; navigatingFlag = false; setOcrStatus('カメラ起動');
+          // Try BarcodeDetector
+          if ('BarcodeDetector' in window){
+            try{ detector = new window.BarcodeDetector(); }
+            catch{ detector = null; }
+          }
+          if (detector){
+            const loop = async ()=>{
+              if (!scanning) return;
+              try{
+                const codes = await detector.detect(videoEl);
+                if (codes && codes.length){
+                  for (const c of codes){
+                    const v = (c.rawValue||'').replace(/\D+/g,'');
+                    if (!navigatingFlag && isValidJanDigits(v)) { navigatingFlag = true; setOcrStatus('検出: '+v); stopCamera(); navigateToProduct(v); return; }
+                  }
+                }
+              }catch{}
+              rafId = requestAnimationFrame(loop);
+            };
+            rafId = requestAnimationFrame(loop);
+          }else{
+            // Fallback OCR from frames (throttled)
+            await loadTesseract();
+            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+            ocrInterval = window.setInterval(async ()=>{
+              if (!scanning || ocrBusy) return; ocrBusy = true;
+              try{
+                const w = videoEl.videoWidth, h = videoEl.videoHeight;
+                if (!w || !h) { ocrBusy = false; return; }
+                canvas.width = w; canvas.height = h; ctx.drawImage(videoEl, 0, 0, w, h);
+                const res = await window.Tesseract.recognize(canvas, 'eng');
+                const cand = pickBestCandidate(extractDigitSeqs(res?.data?.text||''));
+                if (!navigatingFlag && isValidJanDigits(cand)) { navigatingFlag = true; setOcrStatus('検出: '+cand); stopCamera(); navigateToProduct(cand); }
+              }catch(e){ /* ignore transient OCR errors */ }
+              finally{ ocrBusy = false; }
+            }, 1500);
+          }
+        }catch(e){ setOcrStatus('カメラ起動失敗: '+ e.message); }
+      }
+      if (camBtn && camPanel){
+        camBtn.addEventListener('click', ()=>{
+          const show = camPanel.style.display !== 'flex';
+          camPanel.style.display = show ? 'flex' : 'none';
+        });
+      }
+      if (camStartBtn){ camStartBtn.addEventListener('click', ()=>{ startCamera(); }); }
+      if (camStopBtn){ camStopBtn.addEventListener('click', ()=>{ stopCamera(); }); }
       window.addEventListener('beforeunload', ()=>{
         const remember = !!(document.getElementById('aiRememberToggle')?.checked);
         if (!remember){
