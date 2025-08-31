@@ -90,6 +90,36 @@
           </div>
         </div>
       </div>
+      <div id="modelYearCard" class="card">
+        <div class="title2">機種の発売年推定</div>
+        <div class="row" style="gap:8px; align-items:center;">
+          <input id="modelYearInput" type="text" placeholder="例: iPhone 15 / Pixel 7a / Galaxy S23 / Xperia 1 V / AQUOS sense7" style="flex:1; min-width:240px;" autocomplete="off" />
+          <button id="modelYearBtn" class="btn" type="button">発売年を推定</button>
+        </div>
+        <div class="muted" id="modelYearOut" style="margin-top:8px;"></div>
+      </div>
+      <div id="ecSearchCard" class="card">
+        <div class="title2">商品検索（楽天/ヤフー）</div>
+        <div class="col" style="gap:8px;">
+          <label class="row" style="gap:8px;">
+            <span class="muted">Rakuten AppID</span>
+            <input id="rakutenAppIdInput" type="password" placeholder="Rakuten applicationId" style="width:260px;" autocomplete="off" />
+          </label>
+          <label class="row" style="gap:8px;">
+            <span class="muted">Yahoo AppID</span>
+            <input id="yahooAppIdInput" type="password" placeholder="Yahoo appid" style="width:260px;" autocomplete="off" />
+          </label>
+          <label class="row" style="gap:8px;">
+            <input id="ecRememberToggle" type="checkbox" />
+            <span class="muted">入力情報を端末に保存</span>
+          </label>
+          <div class="row" style="gap:8px; align-items:center;">
+            <button id="ecSearchBtn" class="btn" type="button">商品を検索</button>
+            <span id="ecStatus" class="muted"></span>
+          </div>
+          <pre id="ecOut" style="white-space:pre-wrap; margin:0;"></pre>
+        </div>
+      </div>
       <div id="settingsCard" class="card">
         <div class="title2">設定</div>
         <label class="row" style="gap:8px;">
@@ -706,12 +736,20 @@
               const v = token.trim();
               if (!v) continue;
               if (v.length<2 || v.length>40) continue;
-              // basic allowlist of brand keywords
-              if (/(iPhone|Xperia|Galaxy|Pixel|AQUOS|arrows|OPPO|Reno|HUAWEI|Xiaomi|Redmi|ZenFone|Nothing|Moto|XPERIA|GALAXY|iPad)/i.test(v)) out.add(v);
+              // extended brand keywords
+              if (/(iPhone(?:\s?SE)?|Xperia|Galaxy|Pixel|AQUOS|arrows|OPPO|Reno|HUAWEI|Huawei|Xiaomi|Redmi|Redmi\s?Note|ZenFone|ROG\s?Phone|Nothing(?:\s?Phone)?|OnePlus|realme|Moto|Libero|BASIO|URBANO|DIGNO|Qua\s?phone|Kyocera|iPad)/i.test(v)) out.add(v);
             }
           }
           // 2) Generic model patterns (window around keywords)
-          const kw = ['iPhone','Xperia','Galaxy','Pixel','AQUOS','arrows','OPPO','Reno','HUAWEI','Xiaomi','Redmi','ZenFone','Nothing','Moto','iPad'];
+          const kw = [
+            'iPhone','iPhone SE',
+            'Xperia','Xperia 1','Xperia 5','Xperia 10',
+            'Galaxy','Galaxy S','Galaxy A','Galaxy Z',
+            'Pixel','Pixel a',
+            'AQUOS','AQUOS sense','AQUOS wish',
+            'arrows','OPPO','Reno','HUAWEI','Huawei','Xiaomi','Redmi','Redmi Note',
+            'ZenFone','ROG Phone','Nothing','Nothing Phone','OnePlus','realme','Moto','Libero','BASIO','URBANO','DIGNO','Qua phone','iPad'
+          ];
           for (const k of kw){
             // Allow a short window of characters after the keyword (ASCII + Japanese + digits + signs + spaces)
             const r = new RegExp(k+"[\\x00-\\x7F\\u3000-\\u30FF\\u4E00-\\u9FAF0-9\\-\\+\\s]{0,30}", 'gi');
@@ -839,6 +877,193 @@
       const cseRememberTgl = document.getElementById('cseRememberToggle'); if (cseRememberTgl) cseRememberTgl.addEventListener('change', persistCSEInputsIfNeeded);
       const cseKeyEl = document.getElementById('cseKeyInput'); if (cseKeyEl) cseKeyEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
       const cseCxEl = document.getElementById('cseCxInput'); if (cseCxEl) cseCxEl.addEventListener('input', ()=>{ persistCSEInputsIfNeeded(); });
+      // --- EC (Rakuten/Yahoo) search inputs persist/restore ---
+      const EC_STORE = 'ec_store_v1';
+      const RAKUTEN_APP_ID_DEFAULT = '1090907341276509341';
+      const YAHOO_APP_ID_DEFAULT = 'dj00aiZpPU5xaFBLMGo5ZkJTNSZzPWNvbnN1bWVyc2VjcmV0Jng9MmY-';
+      function applyStoredECInputs(){
+        try{
+          const raw = localStorage.getItem(EC_STORE); if (!raw) return;
+          const o = JSON.parse(raw);
+          const r = document.getElementById('rakutenAppIdInput'); if (r && o.rakutenAppId) r.value = o.rakutenAppId;
+          const y = document.getElementById('yahooAppIdInput'); if (y && o.yahooAppId) y.value = o.yahooAppId;
+          const t = document.getElementById('ecRememberToggle'); if (t) t.checked = !!o.remember;
+        }catch{}
+      }
+      function persistECInputsIfNeeded(){
+        try{
+          const remember = !!(document.getElementById('ecRememberToggle')?.checked);
+          if (!remember){ localStorage.removeItem(EC_STORE); return; }
+          const r = (document.getElementById('rakutenAppIdInput')?.value||'').trim();
+          const y = (document.getElementById('yahooAppIdInput')?.value||'').trim();
+          localStorage.setItem(EC_STORE, JSON.stringify({ remember:true, rakutenAppId:r, yahooAppId:y }));
+        }catch{}
+      }
+      applyStoredECInputs();
+      const ecRememberTgl = document.getElementById('ecRememberToggle'); if (ecRememberTgl) ecRememberTgl.addEventListener('change', persistECInputsIfNeeded);
+      const rakutenEl = document.getElementById('rakutenAppIdInput'); if (rakutenEl) rakutenEl.addEventListener('input', persistECInputsIfNeeded);
+      // Prefill Rakuten AppID only when no saved value exists
+      if (rakutenEl && !rakutenEl.value){ rakutenEl.value = RAKUTEN_APP_ID_DEFAULT; }
+      const yahooEl = document.getElementById('yahooAppIdInput'); if (yahooEl) yahooEl.addEventListener('input', persistECInputsIfNeeded);
+      // Prefill Yahoo AppID only when no saved value exists
+      if (yahooEl && !yahooEl.value){ yahooEl.value = YAHOO_APP_ID_DEFAULT; }
+      // --- EC search logic ---
+      function bestQueryForEC(){
+        const manual = digitsOnly(document.getElementById('janInput')?.value||'');
+        if (manual) return manual;
+        if (isLikelyCode) return code;
+        const nm = (document.getElementById('name')?.textContent||'').trim();
+        if (nm && nm !== '製品名') return nm;
+        return '';
+      }
+      function setEcStatus(msg){ const el = document.getElementById('ecStatus'); if (el) el.textContent = msg||''; }
+      function setEcOut(txt){ const el = document.getElementById('ecOut'); if (el) el.textContent = txt||''; }
+      async function searchRakutenIchiba(q, appId){
+        if (!appId) throw new Error('Rakuten AppID未設定');
+        const url = `https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706?format=json&applicationId=${encodeURIComponent(appId)}&keyword=${encodeURIComponent(q)}&hits=10`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Rakuten APIエラー');
+        const j = await r.json();
+        const items = (j.Items||[]).map(w=> w.Item || w.item || w).slice(0,10);
+        return items.map(it=>({
+          name: it.itemName||it.item_name||'-',
+          price: it.itemPrice!=null? String(it.itemPrice): (it.item_price!=null? String(it.item_price): ''),
+          url: it.itemUrl||it.item_url||'',
+          shop: it.shopName||it.shop_name||'',
+          caption: it.itemCaption||it.item_caption||''
+        }));
+      }
+      async function searchYahooShopping(q, appId){
+        if (!appId) throw new Error('Yahoo AppID未設定');
+        const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?appid=${encodeURIComponent(appId)}&query=${encodeURIComponent(q)}&hits=10`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Yahoo APIエラー');
+        const j = await r.json();
+        const hits = (j.hits||j.items||[]).slice(0,10);
+        return hits.map(it=>({
+          name: it.name||it.title||'-',
+          price: (it.price&& (it.price._value||it.price))? String(it.price._value||it.price): '',
+          url: it.url||it.link||'',
+          shop: (it.seller&& (it.seller.name||it.seller.sellerName)) || (it.store&&it.store.name) || '',
+          description: it.description||it.explanation||it.summary||''
+        }));
+      }
+      function extractDevicesFromEcText(a){
+        try{
+          const txt = [a.name, a.caption, a.description].filter(Boolean).join(' ');
+          const list = (typeof extractDevicesFromText==='function') ? extractDevicesFromText(txt) : [];
+          return Array.from(new Set(list)).slice(0,6);
+        }catch{ return []; }
+      }
+      function renderEcResults(rk, yh){
+        const toLines = (arr)=> arr.map(a=>{
+          const p = a.price? ` (¥${a.price})` : '';
+          const s = a.shop? ` - ${a.shop}`: '';
+          const u = a.url? `\n  ${a.url}`: '';
+          const devs = extractDevicesFromEcText(a);
+          const d  = devs.length? `\n  対応: ${devs.join(', ')}`: '';
+          return `• ${a.name}${p}${s}${u}${d}`;
+        });
+        const parts = [];
+        parts.push('Rakuten:'); parts.push(...(rk.length? toLines(rk): ['(No results)']));
+        parts.push('');
+        parts.push('Yahoo:'); parts.push(...(yh.length? toLines(yh): ['(No results)']));
+        return parts.join('\n');
+      }
+      const ecBtn = document.getElementById('ecSearchBtn'); if (ecBtn) ecBtn.addEventListener('click', async ()=>{
+        const q = bestQueryForEC(); if (!q){ alert('検索キーワードがありません'); return; }
+        const rakutenId = (document.getElementById('rakutenAppIdInput')?.value||'').trim();
+        const yahooId = (document.getElementById('yahooAppIdInput')?.value||'').trim();
+        setEcStatus('検索中...'); setEcOut('');
+        try{
+          const [rkRes, yhRes] = await Promise.allSettled([
+            searchRakutenIchiba(q, rakutenId),
+            searchYahooShopping(q, yahooId)
+          ]);
+          const rk = rkRes.status==='fulfilled'? rkRes.value: [];
+          const yh = yhRes.status==='fulfilled'? yhRes.value: [];
+          const errMsgs = [];
+          if (rkRes.status==='rejected') errMsgs.push('Rakuten: '+ rkRes.reason?.message);
+          if (yhRes.status==='rejected') errMsgs.push('Yahoo: '+ yhRes.reason?.message);
+          setEcOut(renderEcResults(rk, yh) + (errMsgs.length? ('\n\nWarnings:\n- '+ errMsgs.join('\n- ')):''));
+          setEcStatus(`完了（${rk.length}+${yh.length}件）`);
+        }catch(e){ setEcStatus('エラー'); setEcOut('エラー: '+ e.message); }
+      });
+      // --- Model year estimator ---
+      function romanToInt(roman){
+        if (!roman) return NaN;
+        const map = {I:1,V:5,X:10};
+        let s = 0, prev = 0;
+        for (const ch of roman.toUpperCase()){
+          const v = map[ch]||0; s += v <= prev ? v : (v - 2*prev); prev = v;
+        }
+        return s||NaN;
+      }
+      function estimateModelYear(raw){
+        const text = (raw||'').replace(/［|【|】|］/g,' ').replace(/\s+/g,' ').trim();
+        if (!text) return null;
+        // iPhone SE generations
+        if (/iPhone\s*SE/i.test(text)){
+          const gen = (/第?\s*(\d)\s*世代/.exec(text)||[])[1] || (/SE\s*(\d)/i.exec(text)||[])[1];
+          if (gen==='1') return { brand:'Apple', model:text, year:2016, rule:'iPhone SE(1st)=2016'};
+          if (gen==='2') return { brand:'Apple', model:text, year:2020, rule:'iPhone SE(2nd)=2020'};
+          if (gen==='3') return { brand:'Apple', model:text, year:2022, rule:'iPhone SE(3rd)=2022'};
+          return { brand:'Apple', model:text, year:2022, rule:'iPhone SE≈2020-2022'};
+        }
+        // iPhone numeric
+        const mIph = /iPhone\s*(?:[Xx]|\d{1,2})\s*(?:Pro(?:\s?Max)?|Max|mini)?/i.exec(text);
+        if (mIph){
+          const hasX = /iPhone\s*[XxRrSs]/i.test(text);
+          if (/XR/i.test(text)) return {brand:'Apple', model:text, year:2018, rule:'iPhone XR=2018'};
+          if (/XS/i.test(text)) return {brand:'Apple', model:text, year:2018, rule:'iPhone XS=2018'};
+          if (hasX) return {brand:'Apple', model:text, year:2017, rule:'iPhone X=2017'};
+          const n = (/iPhone\s*(\d{1,2})/i.exec(text)||[])[1];
+          const ipYear = { '6':2014,'6s':2015,'7':2016,'8':2017,'11':2019,'12':2020,'13':2021,'14':2022,'15':2023 };
+          const withS = /6s/i.test(text) ? '6s' : n;
+          if (withS && ipYear[withS]) return {brand:'Apple', model:text, year:ipYear[withS], rule:'iPhone number map'};
+        }
+        // Pixel base / a-series
+        const mPx = /Pixel\s*(\d{1,2})(\s*[aA])?/i.exec(text);
+        if (mPx){
+          const num = mPx[1]; const isA = !!mPx[2];
+          const base = { '1':2016,'2':2017,'3':2018,'4':2019,'5':2020,'6':2021,'7':2022,'8':2023 };
+          const as = { '3':2019,'4':2020,'5':2021,'6':2022,'7':2023,'8':2024 };
+          const y = isA ? as[num] : base[num];
+          if (y) return {brand:'Google', model:text, year:y, rule:isA?'Pixel a map':'Pixel map'};
+        }
+        // Galaxy S series
+        const mGs = /Galaxy\s*S\s*(\d{1,2})/i.exec(text);
+        if (mGs){
+          const s = mGs[1];
+          const gy = { '7':2016,'8':2017,'9':2018,'10':2019,'20':2020,'21':2021,'22':2022,'23':2023,'24':2024 };
+          if (gy[s]) return {brand:'Samsung', model:text, year:gy[s], rule:'Galaxy S map'};
+        }
+        // Xperia 1/5/10 with Roman numerals
+        const mXp = /Xperia\s*(1|5|10)\s*([ivxIVX]+)/.exec(text) || /Xperia\s*(1|5|10)\s*(?:Mark\s*)?([ivxIVX]+)/i.exec(text);
+        if (mXp){
+          const series = mXp[1]; const roman = romanToInt(mXp[2]);
+          const base = 2019; // I=2019
+          if (roman>=1 && roman<=6){ return {brand:'Sony', model:text, year:base + (roman-1), rule:`Xperia ${series} Roman`}; }
+        }
+        // AQUOS sense
+        const mAq = /AQUOS\s*sense\s*(\d+)/i.exec(text);
+        if (mAq){
+          const n = parseInt(mAq[1],10);
+          const aq = {3:2019,4:2020,6:2021,7:2022,8:2023};
+          if (aq[n]) return {brand:'SHARP', model:text, year:aq[n], rule:'AQUOS sense map'};
+        }
+        return null;
+      }
+      const modelYearBtn = document.getElementById('modelYearBtn');
+      if (modelYearBtn){
+        modelYearBtn.addEventListener('click', ()=>{
+          const v = (document.getElementById('modelYearInput')?.value||'').trim();
+          const outEl = document.getElementById('modelYearOut');
+          const res = estimateModelYear(v);
+          if (!res){ outEl.textContent = '推定できませんでした。例: iPhone 15, Pixel 7a, Galaxy S23, Xperia 1 V'; return; }
+          outEl.textContent = `推定: ${res.year}年頃（${res.model} / ${res.rule}）`;
+        });
+      }
       // --- JAN manual/auto inputs ---
       function digitsOnly(s){ return (s||'').replace(/\D+/g,''); }
       function isValidJanDigits(d){ return /^\d{8}$|^\d{12}$|^\d{13}$/.test(d); }
@@ -981,6 +1206,11 @@
         if (!rememberCSE){
           const k = document.getElementById('cseKeyInput'); if (k) k.value='';
           const c = document.getElementById('cseCxInput'); if (c) c.value='';
+        }
+        const rememberEC = !!(document.getElementById('ecRememberToggle')?.checked);
+        if (!rememberEC){
+          const r = document.getElementById('rakutenAppIdInput'); if (r) r.value='';
+          const y = document.getElementById('yahooAppIdInput'); if (y) y.value='';
         }
       });
 
