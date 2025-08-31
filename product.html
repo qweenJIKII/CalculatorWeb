@@ -920,17 +920,31 @@
       function setEcOut(txt){ const el = document.getElementById('ecOut'); if (el) el.textContent = txt||''; }
       async function searchRakutenIchiba(q, appId){
         if (!appId) throw new Error('Rakuten AppID未設定');
-        const url = `https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706?format=json&applicationId=${encodeURIComponent(appId)}&keyword=${encodeURIComponent(q)}&hits=10`;
-        const r = await fetch(url);
+        const base = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706';
+        const params = new URLSearchParams({
+          format: 'json',
+          formatVersion: '2',
+          applicationId: appId,
+          keyword: q || '',
+          hits: '10',
+          page: '1',
+          // limit fields to reduce payload (doc: elements)
+          elements: 'itemName,itemPrice,shopName,itemUrl,itemCaption'
+        });
+        const url = `${base}?${params.toString()}`;
+        const r = await fetch(url, { cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer' });
         if (!r.ok) throw new Error('Rakuten APIエラー');
         const j = await r.json();
-        const items = (j.Items||[]).map(w=> w.Item || w.item || w).slice(0,10);
-        return items.map(it=>({
-          name: it.itemName||it.item_name||'-',
-          price: it.itemPrice!=null? String(it.itemPrice): (it.item_price!=null? String(it.item_price): ''),
-          url: it.itemUrl||it.item_url||'',
-          shop: it.shopName||it.shop_name||'',
-          caption: it.itemCaption||it.item_caption||''
+        if (j && j.error){ throw new Error(`Rakuten API: ${j.error_description||j.error}`); }
+        const itemsV2 = Array.isArray(j?.Items)? j.Items: [];
+        const items = itemsV2.length ? itemsV2 : (j.Items||[]).map(w=> w.Item || w.item || w);
+        const top = items.slice(0,10);
+        return top.map(it=>({
+          name: it.itemName || it.title || '',
+          price: it.itemPrice || it.price || '',
+          shop: it.shopName || '',
+          url: it.itemUrl || it.url || '',
+          desc: it.itemCaption || it.description || ''
         }));
       }
       async function searchYahooShopping(q, appId){
